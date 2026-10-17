@@ -91,3 +91,49 @@ def test_discovery_updates_preserve_selected_accessible_device(window, app):
     window.refresh_peers()
     assert len(window.peer_buttons) == 1 and window.selected_id() == peer_id
     assert window.peer_buttons[peer_id] is button
+
+
+def test_unsaved_changes_return_after_successful_save_and_survive_network_notice(window, app):
+    assert not any(button.isEnabled() for button in window.save_buttons)
+    window.device_name.setText("Saved name")
+    assert all(button.isEnabled() for button in window.save_buttons)
+    window.save_settings()
+    assert all(label.text() == "所有更改已保存" for label in window.saved_labels)
+    assert not any(button.isEnabled() for button in window.save_buttons)
+    window.device_name.setText("Unsaved name")
+    window.notice("对方已断开连接")
+    assert window.settings.get("name") == "Saved name"
+    assert all(label.text() == "有未保存的更改" for label in window.saved_labels)
+    assert all(button.isEnabled() for button in window.save_buttons)
+    # Returning the form to its saved values clears the pending state.
+    window.device_name.setText("Saved name")
+    assert not any(button.isEnabled() for button in window.save_buttons)
+    window.games.setText("another-game.exe")
+    assert all(label.text() == "有未保存的更改" for label in window.saved_labels)
+
+
+@pytest.mark.parametrize("changes,expected", [
+    ({"ready": False}, "权限设置"),
+    ({"game": True}, "游戏保护中"),
+    ({"paused": True}, "共享已暂停"),
+    ({"connected": False}, "连接另一台电脑"),
+    ({"peer_available": False}, "对方暂不可用"),
+    ({"system_blocked": True}, "恢复桌面"),
+])
+def test_blocked_home_prompts_next_action_instead_of_crossing_edge(window, changes, expected):
+    state = dict(state="local", ready=True, connected=True, peer_name="Paired PC", peer_available=True,
+                 game=False, manual_game=False, auto_reason="", paused=False, error="")
+    window.show_status({**state, **changes})
+    assert expected in window.edge_hint.text()
+    assert "180 ms" not in window.edge_hint.text()
+    assert window.permission_cta.isHidden() == changes.get("ready", True)
+
+
+def test_permission_entry_opens_reusable_guide_without_native_prompt(window, app):
+    window.check_permissions()
+    guide = window.permission_guide
+    assert guide.isVisible()
+    window.check_permissions()
+    assert window.permission_guide is guide
+    guide.close()
+    assert not guide.timer.isActive()

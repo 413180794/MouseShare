@@ -58,6 +58,9 @@ class BaseBackend:
     def permissions(self, request=False):
         return True
 
+    def permission_status(self):
+        return {}
+
     def bounds(self):
         return (0, 0, 1920, 1080)
 

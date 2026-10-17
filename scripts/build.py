@@ -24,20 +24,27 @@ def make_icons():
     # One source of artwork for the running app and all installer formats.
     sys.path.insert(0, str(ROOT))
     from mouseshare.branding import icon_image
-    image = icon_image(1024)
-    png = ASSETS / "icon.png"
-    image.scaled(256, 256).save(str(png))
-    data = png.read_bytes()
-    # Windows Vista+ supports PNG-compressed ICO images.
-    ico = ASSETS / "MouseShare.ico"
-    ico.write_bytes(struct.pack("<HHH", 0, 1, 1) + struct.pack("<BBBBHHII", 0, 0, 0, 0, 1, 32,
-                                                            len(data), 22) + data)
+    # Render every size from the vector source; small sizes use simplified artwork.
+    images = {}
+    for size in [16, 24, 32, 48, 64, 128, 256, 512, 1024]:
+        images[size] = ASSETS / f"icon-{size}.png"
+        icon_image(size).save(str(images[size]))
+    shutil.copyfile(images[256], ASSETS / "icon.png")
+    # Windows Vista+ supports PNG-compressed ICO images; include each shell size.
+    entries = [(size, images[size].read_bytes()) for size in [16, 24, 32, 48, 64, 128, 256]]
+    header = struct.pack("<HHH", 0, 1, len(entries))
+    offset = 6 + 16 * len(entries)
+    directory = b""
+    for size, data in entries:
+        directory += struct.pack("<BBBBHHII", size % 256, size % 256, 0, 0, 1, 32, len(data), offset)
+        offset += len(data)
+    (ASSETS / "MouseShare.ico").write_bytes(header + directory + b"".join(data for _, data in entries))
     if sys.platform == "darwin":
         iconset = ASSETS / "MouseShare.iconset"
         iconset.mkdir(exist_ok=True)
         for size in [16, 32, 128, 256, 512]:
-            image.scaled(size, size).save(str(iconset / f"icon_{size}x{size}.png"))
-            image.scaled(size * 2, size * 2).save(str(iconset / f"icon_{size}x{size}@2x.png"))
+            shutil.copyfile(images[size], iconset / f"icon_{size}x{size}.png")
+            shutil.copyfile(images[size * 2], iconset / f"icon_{size}x{size}@2x.png")
         run("iconutil", "-c", "icns", iconset, "-o", ASSETS / "MouseShare.icns")
 
 
@@ -83,7 +90,7 @@ def main():
         import plistlib
         info = bundle / "Contents/Info.plist"
         content = plistlib.loads(info.read_bytes())
-        content.update({"CFBundleShortVersionString": "0.2.4", "CFBundleVersion": "8",
+        content.update({"CFBundleShortVersionString": "0.2.5", "CFBundleVersion": "9",
                         "LSMinimumSystemVersion": "13.0",
                         "NSLocalNetworkUsageDescription": "自动发现局域网中的电脑，并共享鼠标和键盘。",
                         "NSInputMonitoringUsageDescription": "读取键鼠输入以在您配对的电脑之间切换控制。",
@@ -99,7 +106,7 @@ def main():
         shutil.copytree(bundle, stage / bundle.name, symlinks=True)
         (stage / "Applications").symlink_to("/Applications")
         shutil.copyfile(ROOT / "docs/INSTALL-macOS.txt", stage / "安装说明.txt")
-        target = DIST / f"MouseShare-0.2.4-macOS-{platform.machine()}.dmg"
+        target = DIST / f"MouseShare-0.2.5-macOS-{platform.machine()}.dmg"
         target.unlink(missing_ok=True)
         run("hdiutil", "create", "-volname", "MouseShare", "-srcfolder", stage,
             "-ov", "-format", "UDZO", target)
@@ -109,7 +116,7 @@ def main():
         compiler = Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe")
         run(compiler, ROOT / "packaging/windows.iss")
         shutil.copyfile(ROOT / "docs/INSTALL-Windows.txt", DIST / "MouseShare/安装说明.txt")
-        shutil.make_archive(str(DIST / "MouseShare-0.2.4-Windows-x64-portable"), "zip",
+        shutil.make_archive(str(DIST / "MouseShare-0.2.5-Windows-x64-portable"), "zip",
                             DIST, "MouseShare")
     else:
         raise RuntimeError("Build on Windows or macOS")

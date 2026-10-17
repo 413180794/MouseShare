@@ -41,6 +41,25 @@ def test_native_api_loading():
     assert backend.bounds()[2] > 0
 
 
+@pytest.mark.skipif(sys.platform != "darwin", reason="Mac TCC permissions")
+def test_mac_permission_checks_are_independent_and_requests_are_scoped(monkeypatch):
+    from mouseshare.input.macos import AX, Q, MacBackend
+    calls = []
+    monkeypatch.setattr(AX, "AXIsProcessTrusted", lambda: True)
+    monkeypatch.setattr(Q, "CGPreflightListenEventAccess", lambda: False)
+    monkeypatch.setattr(AX, "AXIsProcessTrustedWithOptions", lambda options: calls.append("accessibility"))
+    monkeypatch.setattr(Q, "CGRequestListenEventAccess", lambda: calls.append("input_monitoring"))
+    backend = MacBackend(lambda event: True)
+    assert backend.permission_status() == {"accessibility": True, "input_monitoring": False}
+    assert not backend.permissions() and calls == []
+    backend.request_permission("input_monitoring")
+    assert calls == ["input_monitoring"]
+    backend.request_permission("accessibility")
+    assert calls == ["input_monitoring", "accessibility"]
+    with pytest.raises(ValueError):
+        backend.request_permission("unknown")
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="Win32 ABI")
 def test_win32_input_struct_layout_and_hook_thread():
     from mouseshare.input.windows import Input, RawInputHeader, RawMouse, RawMouseInput, WindowsBackend

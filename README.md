@@ -4,7 +4,7 @@ Windows / macOS 局域网鼠标键盘共享。鼠标在指定屏幕边缘稍作�
 
 [下载安装包](https://github.com/413180794/MouseShare/releases) · [构建记录](https://github.com/413180794/MouseShare/actions) · [双机验收清单](docs/ACCEPTANCE.md)
 
-**v0.2.4 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
+**v0.2.5 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
 
 ![MouseShare 界面示意，设备数据为演示数据](docs/screenshot.png)
 
@@ -12,22 +12,24 @@ Windows / macOS 局域网鼠标键盘共享。鼠标在指定屏幕边缘稍作�
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.2.4-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
-| Apple Silicon Mac，macOS 13+ | `MouseShare-0.2.4-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Intel Mac，macOS 13+ | `MouseShare-0.2.4-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Windows 便携版 | `MouseShare-0.2.4-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
+| Windows 10/11 x64 | `MouseShare-0.2.5-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
+| Apple Silicon Mac，macOS 13+ | `MouseShare-0.2.5-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Intel Mac，macOS 13+ | `MouseShare-0.2.5-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Windows 便携版 | `MouseShare-0.2.5-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
 
 预览版尚无商业代码签名／Apple 公证。请核对下载来源及 Release 中 `SHA256SUMS.txt`：Windows 可用 `Get-FileHash 文件名 -Algorithm SHA256`，Mac 可用 `shasum -a 256 文件名`。Windows SmartScreen 显示未知发布者时，可查看「更多信息」；macOS 拦截时，先尝试启动，再到「系统设置 → 隐私与安全性」查看「仍要打开」。保留系统安全功能。
 
-macOS 首次运行，点击侧栏的「系统权限」，为 MouseShare 开启：
+macOS 首次运行缺少权限时，会显示设置向导；也可点击首页「设置键鼠权限」或侧栏「系统权限」。向导分两步显示状态，并提供原生授权请求及对应系统设置入口：
 
 1. **辅助功能**：允许注入鼠标键盘事件。
 2. **输入监控**：允许捕获实体鼠标键盘。
 3. **本地网络**：系统询问时允许；启用防火墙的 Mac 还需允许入站连接。
 
-系统要求重新启动时，先从菜单栏退出再打开。授权后点击重新检查。每次替换未经开发者签名的预览版，macOS 可能要求重新授权。
+在系统设置中找到 MouseShare，打开开关；列表中没有时点击「＋」，选择「应用程序」中的 MouseShare.app。系统要求重新启动时，按提示退出并重新打开。返回向导后会自动检查，也可点击「重新检查」。系统验证需要由电脑使用者完成。每次替换未经开发者签名的预览版，macOS 可能要求重新授权。
+
+![Mac 权限向导，权限状态为演示数据](docs/permissions.png)
 
 ## 两台电脑首次连接
 

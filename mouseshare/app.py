@@ -18,11 +18,13 @@ from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
 
 from . import __version__
 from .branding import app_icon, line_icon, tray_icon
-from .ui import ScreenMap, apply_theme, card, text_label
+from .ui import (ACCENT, INK_2, WARN_INK, PeerCard, ScreenMap, StatusBadge, apply_theme, card, keycaps,
+                 text_label)
 from .config import Settings
 from .engine import Engine
 from .input import create_backend
 from .network import Discovery, Network
+from .permissions import PermissionGuide
 from .security import Identity
 
 
@@ -40,6 +42,7 @@ class MainWindow(QMainWindow):
         self.settings, self.identity, self.demo = settings, identity, demo
         self.peers, self.dialogs = {}, {}
         self.closed = False
+        self.permission_guide = None
         self.bridge = Bridge()
         self.bridge.peer.connect(self.found_peer)
         self.bridge.pair.connect(self.pair_dialog)
@@ -58,6 +61,7 @@ class MainWindow(QMainWindow):
         self.resize(1060, 820)
         self.setMinimumSize(940, 720)
         self.build_ui()
+        self.bind_settings_feedback()
         self.build_tray()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh_peers)
@@ -85,18 +89,19 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(shell)
         sidebar = QFrame()
         sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(184)
+        sidebar.setFixedWidth(196)
         rail = QVBoxLayout(sidebar)
-        rail.setContentsMargins(18, 30, 18, 18)
-        rail.setSpacing(8)
+        rail.setContentsMargins(14, 26, 14, 18)
+        rail.setSpacing(4)
         brand = QHBoxLayout()
+        brand.setContentsMargins(6, 0, 0, 0)
         logo = QLabel()
-        logo.setPixmap(app_icon().pixmap(34, 34))
+        logo.setPixmap(app_icon().pixmap(36, 36))
         brand.addWidget(logo)
-        brand.addWidget(text_label("MouseShare", "brand"))
-        brand.setSpacing(5)
+        brand.addWidget(text_label("MouseShare", "brand"), 1)
+        brand.setSpacing(6)
         rail.addLayout(brand)
-        rail.addSpacing(24)
+        rail.addSpacing(26)
         self.nav_group = QButtonGroup(self)
         self.nav_group.setExclusive(True)
         self.stack = QStackedWidget()
@@ -105,7 +110,7 @@ class MainWindow(QMainWindow):
                                                 ("游戏模式", "game")]):
             button = QPushButton(label)
             button.setObjectName("nav")
-            button.setIcon(line_icon(icon, "#537463"))
+            button.setIcon(line_icon(icon, INK_2, checked=ACCENT))
             button.setIconSize(QSize(19, 19))
             button.setCheckable(True)
             button.clicked.connect(lambda checked=False, i=index: self.stack.setCurrentIndex(i))
@@ -115,18 +120,22 @@ class MainWindow(QMainWindow):
         rail.addStretch()
         self.permission_button = QPushButton("系统权限")
         self.permission_button.setObjectName("quiet")
-        self.permission_button.setIcon(line_icon("shield", "#65806b", 17))
+        self.permission_button.setIcon(line_icon("shield", INK_2, 17))
         self.permission_button.clicked.connect(self.check_permissions)
         rail.addWidget(self.permission_button)
         help_button = QPushButton("使用说明")
         help_button.setObjectName("quiet")
-        help_button.setIcon(line_icon("help", "#65806b", 17))
+        help_button.setIcon(line_icon("help", INK_2, 17))
         help_button.clicked.connect(lambda: QDesktopServices.openUrl(
             QUrl("https://github.com/413180794/MouseShare/blob/main/README.md")))
         rail.addWidget(help_button)
-        rail.addSpacing(12)
-        rail.addWidget(text_label(f"VERSION {__version__}", "eyebrow"))
-        rail.addWidget(text_label("为你的两台电脑搭一座桥。", "hint", True))
+        rail.addSpacing(14)
+        footer = QVBoxLayout()
+        footer.setContentsMargins(6, 0, 0, 0)
+        footer.setSpacing(4)
+        footer.addWidget(text_label(f"VERSION {__version__}", "eyebrow"))
+        footer.addWidget(text_label("为你的两台电脑搭一座桥。", "hint", True))
+        rail.addLayout(footer)
         outer.addWidget(sidebar)
         outer.addWidget(self.stack, 1)
         self.build_home()
@@ -142,11 +151,12 @@ class MainWindow(QMainWindow):
         root.setObjectName("page")
         scroll.setWidget(root)
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(28, 26, 28, 18)
+        layout.setContentsMargins(32, 28, 32, 22)
         layout.setSpacing(16)
         heading = QHBoxLayout()
+        heading.setContentsMargins(0, 0, 0, 4)
         labels = QVBoxLayout()
-        labels.setSpacing(6)
+        labels.setSpacing(4)
         labels.addWidget(text_label(title, "title"))
         labels.addWidget(text_label(subtitle, "subtitle", True))
         heading.addLayout(labels, 1)
@@ -164,43 +174,51 @@ class MainWindow(QMainWindow):
 
     def build_home(self):
         layout, heading = self.make_page("设备连接", "一套键鼠，在两台电脑间自由切换。")
-        self.status_badge = text_label("正在启动", "statusBadge")
+        self.status_badge = StatusBadge("正在启动")
         heading.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignTop)
         box, body = card()
         box.setObjectName("canvas")
-        body.setSpacing(6)
+        body.setContentsMargins(24, 22, 24, 18)
+        body.setSpacing(4)
         self.state_label = text_label("正在启动…", "state")
         self.detail = text_label("准备连接你的另一台电脑。", "hint", True)
         body.addWidget(self.state_label)
         body.addWidget(self.detail)
         self.screen_map = ScreenMap()
-        self.screen_map.setMinimumHeight(166)
         body.addWidget(self.screen_map)
-        self.edge_hint = text_label("", "hint")
-        self.edge_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        body.addWidget(self.edge_hint)
+        self.edge_hint = text_label("", "chip")
+        edge_row = QHBoxLayout()
+        edge_row.addStretch()
+        edge_row.addWidget(self.edge_hint)
+        self.permission_cta = QPushButton("设置键鼠权限")
+        self.permission_cta.setObjectName("primary")
+        self.permission_cta.clicked.connect(self.check_permissions)
+        edge_row.addWidget(self.permission_cta)
+        edge_row.addStretch()
+        body.addLayout(edge_row)
         layout.addWidget(box)
         row = QHBoxLayout()
         row.setSpacing(10)
         self.game_button = QPushButton("游戏模式")
         self.game_button.setObjectName("game")
-        self.game_button.setIcon(line_icon("game", "#52735d"))
+        self.game_button.setIcon(line_icon("game", INK_2, checked=WARN_INK))
+        self.game_button.setIconSize(QSize(19, 19))
         self.game_button.setCheckable(True)
         self.game_button.setToolTip("把键鼠留在本机，防止游戏中意外跨屏。Ctrl+Alt+F12")
         self.game_button.clicked.connect(lambda: self.engine.command("game"))
         row.addWidget(self.game_button, 1)
         self.pause_button = QPushButton("暂停共享")
-        self.pause_button.setIcon(line_icon("pause", "#67806d", 16))
+        self.pause_button.setIcon(line_icon("pause", INK_2, 16))
         self.pause_button.clicked.connect(lambda: self.engine.command("pause"))
-        row.addWidget(self.pause_button)
+        row.addWidget(self.pause_button, 1)
         take_back = QPushButton("收回控制")
-        take_back.setIcon(line_icon("return", "#67806d", 16))
+        take_back.setIcon(line_icon("return", INK_2, 16))
         take_back.setToolTip("立即释放远端按键并恢复本机控制。Ctrl+Alt+Esc")
         take_back.clicked.connect(lambda: self.engine.command("panic"))
-        row.addWidget(take_back)
+        row.addWidget(take_back, 1)
         layout.addLayout(row)
         box, body = card()
-        body.setContentsMargins(18, 16, 18, 16)
+        body.setContentsMargins(20, 18, 20, 16)
         body.setSpacing(8)
         top = QHBoxLayout()
         top.addWidget(text_label("附近的设备", "section"))
@@ -208,17 +226,21 @@ class MainWindow(QMainWindow):
         self.discovery_label = text_label("自动发现已开启", "hint")
         top.addWidget(self.discovery_label)
         body.addLayout(top)
+        body.addSpacing(4)
         self.peer_buttons = {}
         self.peer_group = QButtonGroup(self)
         self.peer_group.setExclusive(True)
         self.peer_group.buttonClicked.connect(self.update_actions)
         self.peer_list = QVBoxLayout()
-        self.peer_list.setSpacing(6)
+        self.peer_list.setSpacing(8)
         body.addLayout(self.peer_list)
         self.empty_label = text_label("在另一台电脑上打开 MouseShare，设备会自动出现在这里。", "hint", True)
-        self.empty_label.setContentsMargins(4, 18, 4, 18)
+        self.empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.setContentsMargins(4, 22, 4, 22)
         body.addWidget(self.empty_label)
+        body.addSpacing(4)
         row = QHBoxLayout()
+        row.setSpacing(8)
         self.connect_button = QPushButton("配对并连接")
         self.connect_button.setObjectName("primary")
         self.connect_button.clicked.connect(self.connect_selected)
@@ -228,7 +250,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.forget_button)
         row.addStretch()
         manual = QPushButton("通过 IP 连接")
-        manual.setObjectName("quiet")
+        manual.setObjectName("link")
         manual.setCheckable(True)
         row.addWidget(manual)
         body.addLayout(row)
@@ -299,8 +321,10 @@ class MainWindow(QMainWindow):
         body.addWidget(self.device_info)
         layout.addWidget(box)
         box, body = card("随时收回控制")
-        modifier = "Control + Option" if sys.platform == "darwin" else "Ctrl + Alt"
-        body.addWidget(text_label(f"{modifier} + Esc     立即收回键鼠\n{modifier} + F12     切换游戏模式", "hint", True))
+        body.setSpacing(10)
+        modifiers = ["Control", "Option"] if sys.platform == "darwin" else ["Ctrl", "Alt"]
+        body.addWidget(keycaps([*modifiers, "Esc"], "立即收回键鼠"))
+        body.addWidget(keycaps([*modifiers, "F12"], "切换游戏模式"))
         if sys.platform == "darwin":
             body.addWidget(text_label("部分 Mac 键盘需要同时按 Fn。", "hint"))
         layout.addWidget(box)
@@ -309,15 +333,25 @@ class MainWindow(QMainWindow):
 
     def build_game_page(self):
         layout, _ = self.make_page("游戏模式", "专注当前屏幕，让键鼠留在本机。")
-        box, body = card("手动锁定", "开启后暂停双向共享。退出游戏后，可随时恢复跨屏。")
+        box, body = card()
+        row = QHBoxLayout()
+        row.setSpacing(24)
+        text = QVBoxLayout()
+        text.setSpacing(6)
+        text.addWidget(text_label("手动锁定", "section"))
+        text.addWidget(text_label("开启后暂停双向共享。退出游戏后，可随时恢复跨屏。", "hint", True))
+        self.game_detail = text_label("全局快捷键：Ctrl + Alt + F12", "hint", True)
+        text.addWidget(self.game_detail)
+        row.addLayout(text, 1)
         self.game_page_button = QPushButton("开启游戏模式")
         self.game_page_button.setObjectName("game")
-        self.game_page_button.setIcon(line_icon("game", "#52735d"))
+        self.game_page_button.setIcon(line_icon("game", INK_2, checked=WARN_INK))
+        self.game_page_button.setIconSize(QSize(19, 19))
+        self.game_page_button.setMinimumWidth(156)
         self.game_page_button.setCheckable(True)
         self.game_page_button.clicked.connect(lambda: self.engine.command("game"))
-        body.addWidget(self.game_page_button)
-        self.game_detail = text_label("全局快捷键：Ctrl + Alt + F12", "hint", True)
-        body.addWidget(self.game_detail)
+        row.addWidget(self.game_page_button, 0, Qt.AlignmentFlag.AlignVCenter)
+        body.addLayout(row)
         layout.addWidget(box)
         box, body = card("自动保护 · Windows", "前台出现全屏窗口或指定游戏进程时，自动锁定键鼠。")
         self.fullscreen = QCheckBox("全屏时自动开启游戏模式")
@@ -340,19 +374,53 @@ class MainWindow(QMainWindow):
 
     def add_save_row(self, layout):
         row = QHBoxLayout()
+        row.setSpacing(12)
         save = QPushButton("保存设置")
         save.setObjectName("primary")
+        save.setMinimumWidth(108)
         save.clicked.connect(self.save_settings)
+        self.save_buttons = getattr(self, "save_buttons", [])
+        self.save_buttons.append(save)
         row.addWidget(save)
         self.saved_labels = getattr(self, "saved_labels", [])
         hint = text_label("更改后保存生效", "hint", True)
         self.saved_labels.append(hint)
-        row.addWidget(hint)
-        row.addStretch()
-        footer = QWidget()
-        row.setContentsMargins(28, 10, 28, 18)
+        row.addWidget(hint, 1)
+        footer = QFrame()
+        footer.setObjectName("footer")
+        row.setContentsMargins(32, 12, 32, 14)
         footer.setLayout(row)
         self.page_layouts[layout].addWidget(footer)
+
+    def form_values(self):
+        return dict(name=self.device_name.text().strip(), side=self.side.currentData(),
+                    dwell_ms=self.dwell.value(), sensitivity=self.speed.value(),
+                    auto_fullscreen=self.fullscreen.isChecked(),
+                    game_processes=[s.strip() for s in self.games.text().split(";") if s.strip()],
+                    startup=self.startup.isChecked(), swap_ctrl_meta=self.swap.isChecked())
+
+    def bind_settings_feedback(self):
+        self.saved_form = self.form_values()
+        self.form_saved_once = False
+        for signal in (self.device_name.textChanged, self.side.currentIndexChanged, self.dwell.valueChanged,
+                       self.speed.valueChanged, self.fullscreen.toggled, self.games.textChanged,
+                       self.startup.toggled, self.swap.toggled):
+            signal.connect(self.settings_changed)
+        self.settings_changed()
+
+    def save_feedback(self, text, warning=False):
+        for label in self.saved_labels:
+            label.setText(text)
+            label.setProperty("tone", "warning" if warning else "")
+            label.style().unpolish(label)
+            label.style().polish(label)
+
+    def settings_changed(self, *args):
+        dirty = self.form_values() != self.saved_form
+        for button in self.save_buttons:
+            button.setEnabled(dirty)
+        self.save_feedback("有未保存的更改" if dirty else
+                           "所有更改已保存" if self.form_saved_once else "更改后点击保存生效", dirty)
 
     def update_actions(self):
         if not hasattr(self, "connect_button"):
@@ -373,10 +441,31 @@ class MainWindow(QMainWindow):
         self.screen_map.configure(side=self.settings.get("side"), local_name=self.settings.get("name"),
                                   local_os="macOS" if sys.platform == "darwin" else "Windows",
                                   peer_name=peer_name, peer_os=peer_os, connected=bool(state.get("connected")),
-                                  blocked=bool(state.get("game") or state.get("paused") or not state.get("ready")),
-                                  owner=state.get("state", "local"))
+                                  blocked=bool(state.get("game") or state.get("paused") or state.get("system_blocked")
+                                               or not state.get("ready")
+                                               or state.get("connected") and not state.get("peer_available")),
+                                  game=bool(state.get("game")), owner=state.get("state", "local"))
         direction = {"left": "左侧", "right": "右侧", "top": "上方", "bottom": "下方"}[self.settings.get("side")]
-        self.edge_hint.setText(f"移到{direction}边缘，停留 {self.settings.get('dwell_ms')} ms 即可跨屏")
+        if not state.get("ready"):
+            hint = "完成权限设置与输入检查后即可跨屏"
+        elif state.get("game"):
+            hint = "游戏保护中，键鼠留在本机"
+        elif state.get("system_blocked"):
+            hint = "系统恢复桌面后可继续共享"
+        elif state.get("paused"):
+            hint = "共享已暂停，点击「恢复共享」继续"
+        elif not state.get("connected"):
+            hint = "连接另一台电脑后即可跨屏"
+        elif not state.get("peer_available"):
+            hint = "对方暂不可用，请在对方电脑检查共享状态"
+        elif state.get("state") == "sending":
+            hint = "从对方屏幕原路返回即可收回"
+        elif state.get("state") == "receiving":
+            hint = "操作本机实体键鼠可立即收回"
+        else:
+            hint = f"移到{direction}边缘，停留 {self.settings.get('dwell_ms')} ms 即可跨屏"
+        self.edge_hint.setText(hint)
+        self.permission_cta.setVisible(not state.get("ready"))
 
     def build_tray(self):
         self.tray = QSystemTrayIcon(tray_icon(sys.platform == "darwin"), self)
@@ -407,11 +496,11 @@ class MainWindow(QMainWindow):
 
     def notice(self, text):
         self.notice_label.setText(text)
-        for hint in self.saved_labels:
-            hint.setText(text)
 
     def show_status(self, state):
         self.ui_state = state
+        need_permission = (not state["ready"] and sys.platform == "darwin" and
+                           (self.demo or not all(self.backend.permission_status().values())))
         self.game_button.setChecked(state["manual_game"])
         self.game_button.setText("游戏保护中" if state["game"] else "游戏模式")
         self.game_page_button.setChecked(state["manual_game"])
@@ -420,9 +509,12 @@ class MainWindow(QMainWindow):
                                   else "全局快捷键：Control + Option + F12" if sys.platform == "darwin"
                                   else "全局快捷键：Ctrl + Alt + F12"))
         self.pause_button.setText("恢复共享" if state["paused"] else "暂停共享")
+        self.pause_button.setIcon(line_icon("play" if state["paused"] else "pause", INK_2, 16))
         peer = state["peer_name"]
         if not state["ready"]:
-            title, detail = "等待系统授权", state["error"] or "请点击侧栏的系统权限按钮检查。"
+            title = "需要开启键鼠权限" if need_permission else "输入服务未就绪"
+            detail = ("点击下方按钮，按步骤开启辅助功能与输入监控。" if need_permission else
+                      state["error"] or "点击下方按钮检查输入服务。")
         elif state["game"]:
             title, detail = "游戏模式 · 键鼠锁定本机", state["auto_reason"] or "手动游戏模式已开启；再次按快捷键即可关闭。"
         elif state.get("system_blocked"):
@@ -442,15 +534,18 @@ class MainWindow(QMainWindow):
         self.state_label.setText(title)
         self.detail.setTextFormat(Qt.TextFormat.PlainText)
         self.detail.setText(detail)
-        badge = ("需要授权", "warning") if not state["ready"] else (
+        badge = ("需要授权" if need_permission else "需要检查", "warning") if not state["ready"] else (
             ("游戏模式", "warning") if state["game"] else ("已暂停", "idle")
             if state["paused"] or state.get("system_blocked") else ("已连接", "active")
             if state["connected"] else ("等待连接", "idle"))
-        self.status_badge.setText(badge[0])
-        self.status_badge.setProperty("tone", badge[1])
-        self.status_badge.style().unpolish(self.status_badge)
-        self.status_badge.style().polish(self.status_badge)
+        self.status_badge.set_status(*badge)
         self.permission_button.setText("系统权限 · 已就绪" if state["ready"] else "系统权限 · 待授权")
+        self.permission_cta.setText("设置键鼠权限" if need_permission else "检查输入服务")
+        if self.permission_button.property("tone") != ("" if state["ready"] else "warning"):
+            self.permission_button.setProperty("tone", "" if state["ready"] else "warning")
+            self.permission_button.setIcon(line_icon("shield", INK_2 if state["ready"] else WARN_INK, 17))
+            self.permission_button.style().unpolish(self.permission_button)
+            self.permission_button.style().polish(self.permission_button)
         self.permission_button.setToolTip(state["error"] or "检查辅助功能和输入监控权限")
         self.update_map()
         self.update_actions()
@@ -484,24 +579,19 @@ class MainWindow(QMainWindow):
         for peer_id, peer in rows.items():
             button = self.peer_buttons.get(peer_id)
             if button is None:
-                button = QPushButton()
-                button.setObjectName("peer")
-                button.setCheckable(True)
-                button.setMinimumHeight(68)
+                button = PeerCard()
                 self.peer_buttons[peer_id] = button
                 self.peer_group.addButton(button)
                 self.peer_list.addWidget(button)
-            status = "已配对" if peer_id in trusted else "待配对"
+            status, tone = ("已配对", "paired") if peer_id in trusted else ("待配对", "idle")
             session = self.network.session
             if session and session.peer_id == peer_id:
-                status = "已连接" if session.connected else "连接中"
+                status, tone = ("已连接", "active") if session.connected else ("连接中", "warning")
             elif not peer.get("seen"):
-                status = "离线 · 已配对"
+                status, tone = "离线 · 已配对", "idle"
             os_name = {"Darwin": "macOS", "Windows": "Windows"}.get(peer.get("os"), "电脑")
             name = peer.get("name", "电脑")
-            short_name = name if len(name) <= 30 else name[:29] + "…"
-            label = f"{short_name}  ·  {os_name}\n{peer.get('host', '')}  ·  {status}"
-            button.setText(label)
+            button.show_peer(name, os_name, peer.get("host", ""), status, tone)
             full_label = f"{name}，{os_name}，{peer.get('host', '')}，{status}"
             button.setAccessibleName(full_label)
             button.setToolTip(full_label)
@@ -576,26 +666,48 @@ class MainWindow(QMainWindow):
     def pair_dialog(self, session):
         dialog = QDialog(self)
         dialog.setWindowTitle("核对两台电脑的配对码")
-        dialog.setMinimumWidth(440)
+        dialog.setMinimumWidth(460)
         layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(28, 26, 28, 26)
-        layout.setSpacing(18)
-        name = QLabel(f"请求连接：{session.peer_name}")
-        name.setTextFormat(Qt.TextFormat.PlainText)
-        name.setWordWrap(True)
+        layout.setContentsMargins(30, 28, 30, 26)
+        layout.setSpacing(6)
+        logo = QLabel()
+        logo.setPixmap(app_icon().pixmap(52, 52))
+        layout.addWidget(logo, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(6)
+        title = text_label("核对配对码", "section")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title)
+        name = text_label(f"请求连接：{session.peer_name}", "hint", True)
+        name.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(name)
-        code = QLabel(f"{session.code[:3]}  {session.code[3:]}")
-        code.setStyleSheet("font-size: 48px; font-weight: 700; color: #167c67; padding: 18px;")
-        code.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addSpacing(16)
+        code = QWidget()
+        code.setAccessibleName(f"配对码 {session.code}")
+        digits = QHBoxLayout(code)
+        digits.setContentsMargins(0, 0, 0, 0)
+        digits.setSpacing(8)
+        digits.addStretch()
+        for index, digit in enumerate(session.code):
+            if index == 3:
+                digits.addSpacing(14)
+            tile = text_label(digit, "digit")
+            tile.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            digits.addWidget(tile)
+        digits.addStretch()
         layout.addWidget(code)
-        label = QLabel("请确认两台电脑显示相同的六位数字，再在两端点击确认。\n配对成功后，对方可以在共享开启时控制本机键鼠。")
+        layout.addSpacing(16)
+        label = text_label("请确认两台电脑显示相同的六位数字，再在两端点击确认。\n配对成功后，对方可以在共享开启时控制本机键鼠。",
+                           "hint", True)
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
+        layout.addSpacing(18)
         row = QHBoxLayout()
+        row.setSpacing(10)
         reject = QPushButton("拒绝")
         accept = QPushButton("两端数字相同，确认配对")
         accept.setObjectName("primary")
-        row.addWidget(reject)
-        row.addWidget(accept)
+        row.addWidget(reject, 1)
+        row.addWidget(accept, 2)
         layout.addLayout(row)
         accept.clicked.connect(dialog.accept)
         reject.clicked.connect(dialog.reject)
@@ -619,28 +731,33 @@ class MainWindow(QMainWindow):
         name = self.device_name.text().strip()
         if not name or any(ord(c) < 32 for c in name):
             self.notice("请填写有效的本机名称。")
+            self.save_feedback("请填写有效的本机名称。", warning=True)
             return
         try:
             from .startup import set_enabled
             if self.startup.isChecked() != self.settings.get("startup"):
                 set_enabled(self.startup.isChecked())
-            self.settings.set(name=name, side=self.side.currentData(), dwell_ms=self.dwell.value(),
-                              sensitivity=self.speed.value(), auto_fullscreen=self.fullscreen.isChecked(),
-                              game_processes=[s.strip() for s in self.games.text().split(";") if s.strip()],
-                              startup=self.startup.isChecked(), swap_ctrl_meta=self.swap.isChecked())
+            self.settings.set(**self.form_values())
             self.engine.command("changed")
             self.device_info.setText(f"设备指纹  {self.identity.id[:16]}")
             self.update_map()
-            for hint in self.saved_labels:
-                hint.setText("已保存")
+            self.saved_form = self.form_values()
+            self.form_saved_once = True
+            self.settings_changed()
             self.notice("设置已保存。请在两台电脑上分别设置对方所在方向。")
         except OSError as exc:
             self.notice(str(exc))
+            self.save_feedback(str(exc), warning=True)
 
     def check_permissions(self):
-        if not self.demo:
-            self.backend.permissions(request=True)
-            self.engine.command("permissions")
+        if self.permission_guide is None:
+            provider = (lambda: {"accessibility": False, "input_monitoring": False}) if self.demo else None
+            self.permission_guide = PermissionGuide(
+                self.backend, lambda: self.engine.command("permissions"), self,
+                status_provider=provider, demo=self.demo)
+        self.permission_guide.show()
+        self.permission_guide.raise_()
+        self.permission_guide.activateWindow()
 
     def closeEvent(self, event):
         if QSystemTrayIcon.isSystemTrayAvailable() and not self.closed:
@@ -655,6 +772,8 @@ class MainWindow(QMainWindow):
             return
         self.closed = True
         self.timer.stop()
+        if self.permission_guide:
+            self.permission_guide.close()
         for dialog, session in list(self.dialogs.values()):
             session.approve(False)
             dialog.reject()
@@ -724,5 +843,7 @@ def main():
     app.aboutToQuit.connect(window.shutdown)
     if not args.minimized:
         window.show()
+        if sys.platform == "darwin" and not args.demo and not window.backend.permissions():
+            QTimer.singleShot(0, window.check_permissions)
     return app.exec()
 

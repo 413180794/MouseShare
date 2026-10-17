@@ -81,9 +81,21 @@ class MacBackend(BaseBackend):
 
     def permissions(self, request=False):
         if request:
+            self.request_permission("accessibility")
+            self.request_permission("input_monitoring")
+        return all(self.permission_status().values())
+
+    def permission_status(self):
+        return {"accessibility": bool(AX.AXIsProcessTrusted()),
+                "input_monitoring": bool(Q.CGPreflightListenEventAccess())}
+
+    def request_permission(self, kind):
+        if kind == "accessibility":
             AX.AXIsProcessTrustedWithOptions({AX.kAXTrustedCheckOptionPrompt: True})
+        elif kind == "input_monitoring":
             Q.CGRequestListenEventAccess()
-        return bool(AX.AXIsProcessTrusted() and Q.CGPreflightListenEventAccess())
+        else:
+            raise ValueError("Unknown permission")
 
     def bounds(self):
         rect = Q.CGDisplayBounds(Q.CGMainDisplayID())
