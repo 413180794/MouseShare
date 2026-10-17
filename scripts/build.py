@@ -9,8 +9,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QImage, QPainter, QPen
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
@@ -23,23 +21,10 @@ def run(*args):
 
 def make_icons():
     ASSETS.mkdir(parents=True, exist_ok=True)
-    image = QImage(1024, 1024, QImage.Format.Format_ARGB32)
-    image.fill(Qt.GlobalColor.transparent)
-    p = QPainter(image)
-    p.setRenderHint(QPainter.RenderHint.Antialiasing)
-    p.scale(8, 8)
-    p.setPen(Qt.PenStyle.NoPen)
-    p.setBrush(QColor("#16233c"))
-    p.drawRoundedRect(0, 0, 128, 128, 28, 28)
-    p.setBrush(QColor("#59d8bb"))
-    p.drawRoundedRect(15, 28, 44, 48, 6, 6)
-    p.setBrush(QColor("#87b7ff"))
-    p.drawRoundedRect(69, 49, 44, 48, 6, 6)
-    p.setPen(QPen(QColor("white"), 5))
-    p.drawLine(45, 92, 83, 31)
-    p.drawLine(83, 31, 64, 38)
-    p.drawLine(83, 31, 86, 51)
-    p.end()
+    # One source of artwork for the running app and all installer formats.
+    sys.path.insert(0, str(ROOT))
+    from mouseshare.branding import icon_image
+    image = icon_image(1024)
     png = ASSETS / "icon.png"
     image.scaled(256, 256).save(str(png))
     data = png.read_bytes()
@@ -98,7 +83,7 @@ def main():
         import plistlib
         info = bundle / "Contents/Info.plist"
         content = plistlib.loads(info.read_bytes())
-        content.update({"CFBundleShortVersionString": "0.1.2", "CFBundleVersion": "3",
+        content.update({"CFBundleShortVersionString": "0.2.0", "CFBundleVersion": "4",
                         "LSMinimumSystemVersion": "13.0",
                         "NSLocalNetworkUsageDescription": "自动发现局域网中的电脑，并共享鼠标和键盘。",
                         "NSInputMonitoringUsageDescription": "读取键鼠输入以在您配对的电脑之间切换控制。",
@@ -114,7 +99,7 @@ def main():
         shutil.copytree(bundle, stage / bundle.name, symlinks=True)
         (stage / "Applications").symlink_to("/Applications")
         shutil.copyfile(ROOT / "docs/INSTALL-macOS.txt", stage / "安装说明.txt")
-        target = DIST / f"MouseShare-0.1.2-macOS-{platform.machine()}.dmg"
+        target = DIST / f"MouseShare-0.2.0-macOS-{platform.machine()}.dmg"
         target.unlink(missing_ok=True)
         run("hdiutil", "create", "-volname", "MouseShare", "-srcfolder", stage,
             "-ov", "-format", "UDZO", target)
@@ -124,7 +109,7 @@ def main():
         compiler = Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe")
         run(compiler, ROOT / "packaging/windows.iss")
         shutil.copyfile(ROOT / "docs/INSTALL-Windows.txt", DIST / "MouseShare/安装说明.txt")
-        shutil.make_archive(str(DIST / "MouseShare-0.1.2-Windows-x64-portable"), "zip",
+        shutil.make_archive(str(DIST / "MouseShare-0.2.0-Windows-x64-portable"), "zip",
                             DIST, "MouseShare")
     else:
         raise RuntimeError("Build on Windows or macOS")

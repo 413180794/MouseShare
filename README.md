@@ -4,7 +4,7 @@ Windows / macOS 局域网鼠标键盘共享。鼠标在指定屏幕边缘稍作�
 
 [下载安装包](https://github.com/413180794/MouseShare/releases) · [构建记录](https://github.com/413180794/MouseShare/actions) · [双机验收清单](docs/ACCEPTANCE.md)
 
-**v0.1.2 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
+**v0.2.0 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
 
 ![MouseShare 界面示意，设备数据为演示数据](docs/screenshot.png)
 
@@ -12,16 +12,16 @@ Windows / macOS 局域网鼠标键盘共享。鼠标在指定屏幕边缘稍作�
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.1.2-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
-| Apple Silicon Mac，macOS 13+ | `MouseShare-0.1.2-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Intel Mac，macOS 13+ | `MouseShare-0.1.2-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Windows 便携版 | `MouseShare-0.1.2-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
+| Windows 10/11 x64 | `MouseShare-0.2.0-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
+| Apple Silicon Mac，macOS 13+ | `MouseShare-0.2.0-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Intel Mac，macOS 13+ | `MouseShare-0.2.0-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Windows 便携版 | `MouseShare-0.2.0-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
 
 预览版尚无商业代码签名／Apple 公证。请核对下载来源及 Release 中 `SHA256SUMS.txt`：Windows 可用 `Get-FileHash 文件名 -Algorithm SHA256`，Mac 可用 `shasum -a 256 文件名`。Windows SmartScreen 显示未知发布者时，可查看「更多信息」；macOS 拦截时，先尝试启动，再到「系统设置 → 隐私与安全性」查看「仍要打开」。保留系统安全功能。
 
-macOS 首次运行，点击「授权 / 重新检查权限」，为 MouseShare 开启：
+macOS 首次运行，点击侧栏的「系统权限」，为 MouseShare 开启：
 
 1. **辅助功能**：允许注入鼠标键盘事件。
 2. **输入监控**：允许捕获实体鼠标键盘。
@@ -32,12 +32,12 @@ macOS 首次运行，点击「授权 / 重新检查权限」，为 MouseShare �
 ## 两台电脑首次连接
 
 1. 两台电脑加入同一可信局域网，并分别启动 MouseShare。
-2. 在「附近的电脑」中选择对方，点击「配对 / 连接所选电脑」。发现通过局域网组播和广播完成。
+2. 在「设备连接 → 附近的设备」中选择对方，点击「配对并连接」。发现通过局域网组播和广播完成。
 3. **核对两台电脑显示相同的六位配对码，在两端分别确认。** 仅确认自己发起的连接；成功后记住设备证书，自动重连。
-4. 两端分别设置「对方在本机的」方向并保存。例如 Mac 放在 Windows 右边：Windows 选「右侧」，Mac 选「左侧」。
+4. 在「共享设置」中分别设置另一台电脑相对本机的方向并保存。例如 Mac 放在 Windows 右边：Windows 选「右侧」，Mac 选「左侧」。
 5. 鼠标移到所选主屏边缘，停留默认 180ms 后跨屏。键盘输入、点击、拖动、双击、滚轮一起切换。沿进入方向的相反边缘向外移动即可回到原机。
 
-自动发现受路由器客户端隔离、不同子网、VPN 或防火墙影响时，可输入对方 IPv4 手动连接。使用端口：**UDP 24871 / TCP 24872**。Windows 安装程序的可选规则仅允许专用网络的本地子网入站。更换 Wi-Fi 后应检查网络是否为「专用」。
+自动发现受路由器客户端隔离、不同子网、VPN 或防火墙影响时，可展开「通过 IP 连接」并输入对方 IPv4 手动连接。使用端口：**UDP 24871 / TCP 24872**。Windows 安装程序的可选规则仅允许专用网络的本地子网入站。更换 Wi-Fi 后应检查网络是否为「专用」。
 
 ## 游戏模式与收回控制
 
@@ -48,7 +48,7 @@ macOS 首次运行，点击「授权 / 重新检查权限」，为 MouseShare �
 
 界面和托盘／菜单栏均有对应按钮。**游戏模式会暂停本机与远端的双向共享，把实体键鼠留在本机。** 手动开关持久保存，重启应用仍保持。
 
-Windows 还自动检测前台全屏窗口及配置中的游戏进程，例如 `League of Legends.exe`、`VALORANT-Win64-Shipping.exe`、`cs2.exe`。游戏进程名可在设置中用分号分隔。全屏视频也会触发，可关闭全屏检测并保留进程检测。Mac 当前提供手动游戏模式。
+Windows 还自动检测前台全屏窗口及配置中的游戏进程，例如 `League of Legends.exe`、`VALORANT-Win64-Shipping.exe`、`cs2.exe`。游戏进程名可在设置中用分号分隔。全屏视频也会触发，可关闭全屏检测并保留进程检测。Mac 当前提供手动游戏模式。自动保护和游戏进程名单位于独立的「游戏模式」页面。
 
 当自动检测仍在触发时，关闭手动开关会继续保持游戏模式，界面显示触发原因。最稳妥的使用方式是在启动游戏前主动打开游戏模式。反作弊系统可能限制输入钩子或合成输入，具体游戏需要实机验证。
 
