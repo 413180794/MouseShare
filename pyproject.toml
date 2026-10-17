@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mouseshare"
+version = "0.1.0"
+description = "Local, encrypted keyboard and mouse sharing for Windows and macOS"
+requires-python = ">=3.12,<3.15"
+license = "MIT"
+dependencies = [
+  "PySide6-Essentials==6.10.3",
+  "cryptography==46.0.7",
+  "pyobjc-framework-Quartz==12.2.2; sys_platform == 'darwin'",
+  "pyobjc-framework-Cocoa==12.2.2; sys_platform == 'darwin'",
+  "pyobjc-framework-ApplicationServices==12.2.2; sys_platform == 'darwin'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.0.2", "pyinstaller==6.22.3", "ruff==0.14.10"]
+
+[project.scripts]
+mouseshare = "mouseshare.app:main"
+
+[tool.setuptools.packages.find]
+include = ["mouseshare*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 110
+

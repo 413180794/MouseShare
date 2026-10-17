@@ -1,0 +1,76 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: Windows-x64
+          - os: macos-15
+            artifact: macOS-arm64
+          - os: macos-15-intel
+            artifact: macOS-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install dependencies
+        run: python -m pip install ".[dev]"
+      - name: Lint
+        run: python -m ruff check .
+      - name: Tests
+        run: python -m pytest -q
+      - name: Native dependency smoke test
+        run: python -m mouseshare --smoke-test
+      - name: Build installer and verify bundled runtime
+        run: python scripts/build.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: MouseShare-${{ matrix.artifact }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.zip
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: packages
+          merge-multiple: true
+      - name: Publish preview with SHA-256 checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          cd packages
+          sha256sum -- * > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --title "MouseShare $GITHUB_REF_NAME · Preview" --prerelease \
+            --notes-file ../docs/RELEASE.md ./*
+
