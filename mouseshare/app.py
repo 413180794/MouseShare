@@ -529,7 +529,9 @@ class MainWindow(QMainWindow):
         report = {"version": __version__, "state": self.engine.state,
                   "captured": self.backend.captured, "ready": self.backend.ready(),
                   "error": self.backend.error,
-                  "cursor_corrections": getattr(self.backend, "cursor_corrections", 0)}
+                  "captured_moves": getattr(self.backend, "captured_moves", 0),
+                  "cursor_shield": bool(getattr(getattr(self.backend, "_cursor_shield", None), "panels", [])),
+                  "cursor_shield_error": getattr(getattr(self.backend, "_cursor_shield", None), "detail", "")}
         path = self.settings.directory / "input-health.json"
         try:
             temp = path.with_suffix(".tmp")

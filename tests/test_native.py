@@ -14,11 +14,17 @@ def no_real_cursor_changes(monkeypatch):
         return
     from types import SimpleNamespace
     from mouseshare.input.macos import Q
+    import mouseshare.input.macos as native
+    class FakeShield:
+        panels = []
+        def set_enabled(self, enabled):
+            self.panels = [object()] if enabled else []
+    monkeypatch.setattr(native, "CursorShield", FakeShield)
     monkeypatch.setattr(Q, "CGEventCreate", lambda source: object())
     monkeypatch.setattr(Q, "CGEventGetLocation", lambda event: SimpleNamespace(x=0, y=500))
-    def unexpected_warp(point):
-        pytest.fail("Native cursor warps must be mocked in tests")
-    monkeypatch.setattr(Q, "CGWarpMouseCursorPosition", unexpected_warp)
+    monkeypatch.setattr(Q, "CGEventSetLocation", lambda *args: None)
+    monkeypatch.setattr(Q, "CGEventSetIntegerValueField", lambda *args: None)
+    monkeypatch.setattr(Q, "CGWarpMouseCursorPosition", lambda point: 0)
 
 
 def test_common_physical_keys_supported_on_both_platforms():
@@ -106,7 +112,7 @@ def test_absolute_raw_device_has_per_device_baseline_and_no_initial_jump(monkeyp
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Quartz relative mouse input")
-def test_mac_capture_forwards_delta_without_warping_source(monkeypatch):
+def test_mac_capture_forwards_delta_and_keeps_the_handoff_edge(monkeypatch):
     from types import SimpleNamespace
 
     from mouseshare.input.macos import Q, MacBackend
@@ -115,14 +121,16 @@ def test_mac_capture_forwards_delta_without_warping_source(monkeypatch):
     monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", lambda enabled: association.append(enabled) or 0)
     backend = MacBackend(events.append)
     backend.capture(True)
-    monkeypatch.setattr(backend, "move", lambda x, y: warps.append((x, y)))
+    monkeypatch.setattr(backend, "move", lambda x, y: pytest.fail("Source must not be recentered"))
+    monkeypatch.setattr(Q, "CGWarpMouseCursorPosition", lambda point: warps.append(point) or 0)
     monkeypatch.setattr(Q, "CGEventGetLocation", lambda event: SimpleNamespace(x=0, y=500))
     monkeypatch.setattr(Q, "CGEventGetIntegerValueField", lambda event, field: {
         Q.kCGMouseEventDeltaX: -17, Q.kCGMouseEventDeltaY: 6,
     }.get(field, 0))
-    assert backend.callback(None, Q.kCGEventMouseMoved, object(), None) is None
+    event = object()
+    assert backend.callback(None, Q.kCGEventMouseMoved, event, None) is event
     assert (events[-1]["dx"], events[-1]["dy"]) == (-17, 6)
-    assert warps == []
+    assert warps == [(0, 500)]
     assert association == [False]
     backend.capture(False)
     assert association == [False, True]
@@ -259,81 +267,74 @@ def test_mac_tap_uses_hid_location_and_restores_capture_on_loop_failure(monkeypa
     assert not backend.captured and not backend.running
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz background cursor drift")
-@pytest.mark.parametrize("warp_in_delta", [False, True])
-def test_mac_background_recoupling_is_corrected_before_remote_motion(monkeypatch, warp_in_delta):
+@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz stationary native movement")
+@pytest.mark.parametrize("kind", ["move", "drag"])
+def test_mac_returns_stationary_local_event_and_preserves_remote_delta(monkeypatch, kind):
     from types import SimpleNamespace
     from mouseshare.input.macos import Q, MacBackend
 
+    live_event = object()
     live = SimpleNamespace(x=0, y=500)
-    live_event, incoming = object(), object()
-    positions, events, order = [], [], []
-    point = [SimpleNamespace(x=0, y=500)]
-    delta = [-17, 20]
+    incoming = {"position": (700, 800), Q.kCGMouseEventDeltaX: -17, Q.kCGMouseEventDeltaY: 20}
+    events, order = [], []
     monkeypatch.setattr(Q, "CGEventCreate", lambda source: live_event)
-    monkeypatch.setattr(Q, "CGEventGetLocation", lambda event: live if event is live_event else point[0])
+    monkeypatch.setattr(Q, "CGEventGetLocation", lambda event: live if event is live_event else
+                        SimpleNamespace(x=event["position"][0], y=event["position"][1]))
     monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", lambda value: 0)
-    monkeypatch.setattr(Q, "CGEventGetIntegerValueField", lambda event, field: {
-        Q.kCGMouseEventDeltaX: delta[0], Q.kCGMouseEventDeltaY: delta[1],
-    }.get(field, 0))
-    def warp(position):
-        positions.append(position)
-        live.x, live.y = position
-        order.append("hold")
-        return 0
-    monkeypatch.setattr(Q, "CGWarpMouseCursorPosition", warp)
+    monkeypatch.setattr(Q, "CGEventGetIntegerValueField", lambda event, field: event.get(field, 0))
+    def location(event, point):
+        event["position"] = point
+        order.append("stationary")
+    monkeypatch.setattr(Q, "CGEventSetLocation", location)
+    monkeypatch.setattr(Q, "CGEventSetIntegerValueField", lambda event, field, value: event.update({field: value}))
     def emit(event):
-        assert (live.x, live.y) == (0, 500)
+        assert incoming["position"] == (0, 500)
+        assert incoming[Q.kCGMouseEventDeltaX] == incoming[Q.kCGMouseEventDeltaY] == 0
         order.append("forward")
         events.append(event)
         return True
     backend = MacBackend(emit)
     backend.capture(True)
-    for index in range(20):
-        # No sleep: high-rate movement must not bypass the hold operation.
-        point[0] = SimpleNamespace(x=0, y=520)
-        live.x, live.y = 0, 520
-        delta[:] = [-17, 20 if index == 0 or not warp_in_delta else 0]
-        assert backend.callback(None, Q.kCGEventMouseMoved, incoming, None) is None
+    assert backend._cursor_shield.panels
+    native_kind = Q.kCGEventMouseMoved if kind == "move" else Q.kCGEventLeftMouseDragged
+    for _ in range(20):
+        incoming.update({"position": (700, 800), Q.kCGMouseEventDeltaX: -17, Q.kCGMouseEventDeltaY: 20})
+        returned = backend.callback(None, native_kind, incoming, None)
+        # A NULL return would prevent WindowServer applying the fixed location.
+        assert returned is incoming and returned["position"] == (0, 500)
         assert (events[-1]["dx"], events[-1]["dy"]) == (-17, 20)
-    assert positions == [(0, 500)] * 20
-    assert order == ["hold", "forward"] * 20
-    assert backend.cursor_corrections == 20
+    assert order == ["stationary", "forward"] * 20
+    assert backend.captured_moves == 20
     backend.capture(False)
-    # Normal local motion has no correction; no stale warp carries into re-entry.
+    assert not backend._cursor_shield.panels
     live.x, live.y = 50, 600
-    assert backend.hold_cursor(SimpleNamespace(x=50, y=600), 12, 4) == (12, 4)
     backend.capture(True)
-    assert backend._anchor == (50, 600) and backend._warp_offset == (0, 0)
+    assert backend._anchor == (50, 600)
     backend.capture(False)
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz failed cursor hold")
-@pytest.mark.parametrize("failure", ["warp", "ignored_warp", "detach"])
-def test_mac_failed_cursor_hold_stops_forwarding(monkeypatch, failure):
-    from types import SimpleNamespace
+@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz stationary movement failure")
+@pytest.mark.parametrize("failure", ["position", "delta", "shield", "warp"])
+def test_mac_failed_stationary_movement_stops_forwarding(monkeypatch, failure):
     from mouseshare.input.macos import Q, MacBackend
 
-    live = SimpleNamespace(x=0, y=500)
     events, calls = [], []
-    monkeypatch.setattr(Q, "CGEventGetLocation", lambda event: live)
-    def associate(value):
-        calls.append(value)
-        return 1000 if failure == "detach" and len(calls) == 2 else 0
-    monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", associate)
+    monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", lambda value: calls.append(value) or 0)
     monkeypatch.setattr(Q, "CGEventGetIntegerValueField", lambda *args: 0)
     backend = MacBackend(events.append)
-    backend.capture(True)
-    live.y = 520
-    def warp(point):
-        if failure == "warp":
-            return 1000
-        if failure != "ignored_warp":
-            live.x, live.y = point
-        return 0
-    monkeypatch.setattr(Q, "CGWarpMouseCursorPosition", warp)
-    event = object()
-    assert backend.callback(None, Q.kCGEventMouseMoved, event, None) is event
-    assert events == [{"type": "command", "action": "panic"}]
-    assert not backend.captured and backend.error and calls[-1] is True
-
+    def fail(*args):
+        raise OSError("native failure")
+    if failure == "shield":
+        monkeypatch.setattr(backend._cursor_shield, "set_enabled", lambda value: fail() if value else None)
+        with pytest.raises(OSError):
+            backend.capture(True)
+    else:
+        backend.capture(True)
+        api = {"position": "CGEventSetLocation", "delta": "CGEventSetIntegerValueField",
+               "warp": "CGWarpMouseCursorPosition"}[failure]
+        monkeypatch.setattr(Q, api, fail)
+        event = object()
+        assert backend.callback(None, Q.kCGEventMouseMoved, event, None) is event
+        assert events == [{"type": "command", "action": "panic"}]
+        assert backend.error
+    assert not backend.captured and calls[-1] is True
