@@ -161,3 +161,19 @@ def test_hotkeys_are_local_and_not_forwarded():
     assert not backend.captured
     assert events[-1] == {"type": "command", "action": "panic"}
 
+
+def test_locked_desktop_revokes_input_and_blocks_handoff(tmp_path):
+    engine, now = setup(tmp_path)
+    engine.receive({"type": "enter", "edge": "right", "position": 0.5})
+    engine.receive({"type": "key", "key": 225, "down": True})
+    engine.backend.desktop_active = lambda: False
+    engine.tick()
+    assert engine.system_blocked and engine.state == "local"
+    assert not engine.backend.injected_keys and not engine.available
+    hit_edge(engine, now)
+    assert engine.state == "local"
+    engine.backend.desktop_active = lambda: True
+    now[0] += 1
+    engine.tick()
+    assert not engine.system_blocked and engine.available
+

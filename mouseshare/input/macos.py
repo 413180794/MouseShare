@@ -28,6 +28,11 @@ class MacBackend(BaseBackend):
         rect = Q.CGDisplayBounds(Q.CGMainDisplayID())
         return rect.origin.x, rect.origin.y, rect.size.width, rect.size.height
 
+    def desktop_active(self):
+        session = Q.CGSessionCopyCurrentDictionary()
+        return bool(session and not session.get("CGSSessionScreenIsLocked", False)
+                    and session.get("kCGSessionOnConsoleKey", True))
+
     def start(self):
         if self.running:
             return

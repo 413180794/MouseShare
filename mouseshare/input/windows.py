@@ -62,6 +62,10 @@ U.MonitorFromWindow.argtypes = [W.HWND, W.DWORD]
 U.MonitorFromWindow.restype = W.HANDLE
 U.GetMonitorInfoW.argtypes = [W.HANDLE, C.c_void_p]
 U.PostThreadMessageW.argtypes = [W.DWORD, W.UINT, W.WPARAM, W.LPARAM]
+U.OpenInputDesktop.argtypes = [W.DWORD, W.BOOL, W.DWORD]
+U.OpenInputDesktop.restype = W.HANDLE
+U.GetUserObjectInformationW.argtypes = [W.HANDLE, C.c_int, C.c_void_p, W.DWORD, C.POINTER(W.DWORD)]
+U.CloseDesktop.argtypes = [W.HANDLE]
 K.GetModuleHandleW.argtypes = [W.LPCWSTR]
 K.GetModuleHandleW.restype = W.HMODULE
 K.OpenProcess.argtypes = [W.DWORD, W.BOOL, W.DWORD]
@@ -250,6 +254,18 @@ class WindowsBackend(BaseBackend):
             fullscreen = (abs(rect.left - screen.left) <= 2 and abs(rect.top - screen.top) <= 2
                           and abs(rect.right - screen.right) <= 2 and abs(rect.bottom - screen.bottom) <= 2)
         return exe, fullscreen
+
+    def desktop_active(self):
+        desktop = U.OpenInputDesktop(0, False, 1)
+        if not desktop:
+            return False
+        try:
+            name = C.create_unicode_buffer(256)
+            needed = W.DWORD()
+            return bool(U.GetUserObjectInformationW(desktop, 2, name, C.sizeof(name), C.byref(needed))
+                        and name.value.casefold() == "default")
+        finally:
+            U.CloseDesktop(desktop)
 
     def stop(self):
         super().stop()

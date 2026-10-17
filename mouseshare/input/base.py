@@ -64,6 +64,9 @@ class BaseBackend:
     def foreground(self):
         return "", False
 
+    def desktop_active(self):
+        return True
+
     def release_all(self):
         with self.inject_lock:
             for key in list(self.injected_keys):

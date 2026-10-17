@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComb
                                QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout, QHeaderView,
                                QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton,
                                QSpinBox, QSystemTrayIcon, QTableWidget, QTableWidgetItem,
-                               QVBoxLayout, QWidget)
+                               QVBoxLayout, QWidget, QScrollArea, QLayout)
 
 from . import __version__
 from .config import Settings
@@ -64,7 +64,8 @@ QPushButton#primary { background: #70dfc3; color: #102a29; border: 0; font-weigh
 QPushButton#game:checked { background: #ebba66; color: #33240a; }
 QPushButton:disabled { color: #64738a; background: #253044; }
 QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { background: #101b2d; border: 1px solid #3a4c69;
-    border-radius: 5px; padding: 6px; selection-background-color: #365e8d; }
+    border-radius: 5px; padding: 6px; min-height: 18px; selection-background-color: #365e8d; }
+QScrollArea { border: 0; background: #101724; }
 QTableWidget { background: #131e30; gridline-color: #293850; border: 0; border-radius: 6px;
     selection-background-color: #2d4968; }
 QHeaderView::section { background: #1a2538; padding: 8px; color: #9fafc8; border: 0; }
@@ -127,8 +128,12 @@ class MainWindow(QMainWindow):
 
     def build_ui(self):
         root = QWidget()
-        self.setCentralWidget(root)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setWidget(root)
+        self.setCentralWidget(scroll)
         layout = QVBoxLayout(root)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setContentsMargins(26, 22, 26, 22)
         layout.setSpacing(16)
         title = QLabel("MouseShare")
@@ -296,6 +301,8 @@ class MainWindow(QMainWindow):
             title, detail = "等待系统授权", state["error"] or "请点击下方按钮检查权限。"
         elif state["game"]:
             title, detail = "游戏模式 · 键鼠锁定本机", state["auto_reason"] or "手动游戏模式已开启；再次按快捷键即可关闭。"
+        elif state.get("system_blocked"):
+            title, detail = "共享已安全暂停", "系统处于锁屏或其他非交互桌面；恢复桌面后可继续使用。"
         elif state["paused"]:
             title, detail = "共享已暂停", state["error"] or "点击恢复共享继续。"
         elif state["state"] == "sending":
@@ -497,6 +504,7 @@ def main():
             assert identity.context(server=True)
             backend = create_backend(lambda event: True)
             assert backend.bounds()[2] > 0
+            assert isinstance(backend.permissions(), bool)
         print(f"MouseShare {__version__} smoke test OK ({platform.system()} {platform.machine()})")
         return 0
     # A fixed per-user local server prevents a second instance from installing duplicate hooks.

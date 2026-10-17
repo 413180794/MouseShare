@@ -30,6 +30,7 @@ class Engine:
         self.paused = False
         self.manual_game = settings.get("game_mode")
         self.auto_reason = ""
+        self.system_blocked = False
         self.error = ""
         self.edge_since = None
         self.return_since = None
@@ -54,7 +55,8 @@ class Engine:
 
     @property
     def available(self):
-        return bool(self.backend and self.backend.ready() and not self.game and not self.paused)
+        return bool(self.backend and self.backend.ready() and not self.game
+                    and not self.paused and not self.system_blocked)
 
     def enqueue(self, event):
         with self.condition:
@@ -210,6 +212,11 @@ class Engine:
         now = self.clock()
         if now - self.last_auto > 0.5:
             self.last_auto = now
+            blocked = not self.backend.desktop_active()
+            if blocked != self.system_blocked:
+                self.system_blocked = blocked
+                self.release(True)
+                self.announce()
             process, fullscreen = self.backend.foreground()
             games = {name.casefold() for name in self.settings.get("game_processes")}
             reason = (f"游戏进程：{process}" if process.casefold() in games else
@@ -304,6 +311,7 @@ class Engine:
     def status(self):
         state = {"state": self.state, "game": self.game, "manual_game": self.manual_game,
                  "auto_reason": self.auto_reason, "paused": self.paused,
+                 "system_blocked": self.system_blocked,
                  "connected": bool(self.session), "peer_name": self.session.peer_name if self.session else "",
                  "peer_available": self.peer_available,
                  "ready": bool(self.backend and self.backend.ready()),
