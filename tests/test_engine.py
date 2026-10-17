@@ -1,3 +1,5 @@
+import pytest
+
 from mouseshare.config import Settings
 from mouseshare.engine import Engine
 from mouseshare.input.base import NullBackend
@@ -57,6 +59,41 @@ def test_handoff_waits_for_ack_then_routes_and_returns(tmp_path):
     engine.receive({"type": "return"})
     assert engine.state == "local" and not engine.backend.captured
     assert not engine.armed
+
+
+@pytest.mark.parametrize("side,position", [
+    ("right", (1919, 300)), ("left", (0, 300)),
+    ("bottom", (700, 1079)), ("top", (700, 0)),
+])
+def test_fast_pending_motion_does_not_skip_target_entry_edge(tmp_path, side, position):
+    source, now = setup(tmp_path / "source")
+    target, _ = setup(tmp_path / "target")
+    source.settings.set(side=side)
+    target.backend.bounds = lambda: (100, 50, 2560, 1440)
+    source.physical({"type": "move", "x": position[0], "y": position[1], "dx": 800, "dy": 600})
+    now[0] += 0.2
+    source.tick()
+    target.receive(source.session.messages[-1])
+    entry = target.remote_position
+    # High polling rates and a delayed ownership ACK must not replay a burst
+    # that transports the target cursor halfway across its screen on entry.
+    for _ in range(30):
+        source.physical({"type": "move", "x": position[0], "y": position[1], "dx": 900, "dy": 700})
+    source.physical({"type": "key", "key": 4, "down": True})
+    source.physical({"type": "key", "key": 4, "down": False})
+    before = len(source.session.messages)
+    source.receive({"type": "entered"})
+    for message in source.session.messages[before:]:
+        target.receive(message)
+    assert target.backend.moves == [entry]
+    assert not target.backend.injected_keys
+    assert [m["down"] for m in source.session.messages[before:]] == [True, False]
+    # Fresh movement after the ACK still follows the user's chosen sensitivity.
+    target.settings.set(sensitivity=1.5)
+    dx, dy = (-6 if side == "left" else 6), (-4 if side == "top" else 4)
+    source.physical({"type": "move", "x": 960, "y": 540, "dx": dx, "dy": dy})
+    target.receive(source.session.messages[-1])
+    assert target.remote_position == (entry[0] + dx * 1.5, entry[1] + dy * 1.5)
 
 
 def test_game_mode_blocks_both_directions_and_releases_modifiers(tmp_path):

@@ -82,6 +82,7 @@ class WindowsBackend(BaseBackend):
     def __init__(self, emit):
         super().__init__(emit)
         self.anchor = (0, 0)
+        self.recenter_pending = False
         self.last = None
         self.thread_id = 0
         self.started = threading.Event()
@@ -123,9 +124,12 @@ class WindowsBackend(BaseBackend):
             x, y, width, height = self.bounds()
             self.anchor = (x + width // 2, y + height // 2)
             self.captured = True
+            self.recenter_pending = True
             self.move(*self.anchor)
         else:
             self.captured = enabled
+            if not enabled:
+                self.recenter_pending = False
         self.last = None
 
     def mouse_proc(self, code, msg, pointer):
@@ -133,14 +137,26 @@ class WindowsBackend(BaseBackend):
             return U.CallNextHookEx(None, code, msg, pointer)
         try:
             data = C.cast(pointer, C.POINTER(MouseHook)).contents
-            if data.dwExtraInfo == MARKER or data.flags & 1:
+            if data.dwExtraInfo == MARKER:
+                # SendInput is asynchronous relative to the hook thread. Until
+                # our own warp reaches the hook, physical points may still be
+                # relative to the old screen edge, yielding a half-screen delta.
+                if (msg == 0x0200 and self.captured and self.recenter_pending
+                        and abs(data.pt.x - self.anchor[0]) <= 1
+                        and abs(data.pt.y - self.anchor[1]) <= 1):
+                    self.recenter_pending = False
+                return U.CallNextHookEx(None, code, msg, pointer)
+            if data.flags & 1:
                 return U.CallNextHookEx(None, code, msg, pointer)
             x, y = data.pt.x, data.pt.y
             if msg == 0x0200:
                 if self.captured:
+                    if self.recenter_pending:
+                        return 1
                     dx, dy = x - self.anchor[0], y - self.anchor[1]
                     if dx == 0 and dy == 0:
                         return 1
+                    self.recenter_pending = True
                     self.move(*self.anchor)
                 else:
                     dx, dy = (0, 0) if self.last is None else (x - self.last[0], y - self.last[1])
@@ -195,7 +211,7 @@ class WindowsBackend(BaseBackend):
         value = Input(type=0)
         value.mi = MouseInput(round((x - left) * 65535 / max(1, width - 1)),
                               round((y - top) * 65535 / max(1, height - 1)),
-                              0, 0x8000 | 0x4000 | 0x0001, 0, MARKER)
+                              0, 0x8000 | 0x4000 | 0x2000 | 0x0001, 0, MARKER)
         self.send(value)
 
     def key(self, key, down):

@@ -189,6 +189,11 @@ class Engine:
                 for axis in ("dx", "dy"):
                     message[axis] = max(-limit, min(limit, message[axis]))
             if self.state == "pending":
+                # The destination has been placed at its entry edge but has not
+                # acknowledged ownership yet. Replaying this motion burst after
+                # the ACK can skip the edge on the destination's first frame.
+                if kind == "move":
+                    return
                 if len(self.pending_events) >= 256:
                     self.release(True)
                 else:
