@@ -53,6 +53,7 @@ def app_icon():
 
 STYLE = """
 QMainWindow, QDialog { background: #101724; color: #edf2fc; }
+QWidget#page { background: #101724; }
 QWidget { color: #edf2fc; font-size: 13px; }
 QFrame#card { background: #1a2538; border: 1px solid #293850; border-radius: 12px; }
 QLabel#title { font-size: 29px; font-weight: 700; }
@@ -128,6 +129,7 @@ class MainWindow(QMainWindow):
 
     def build_ui(self):
         root = QWidget()
+        root.setObjectName("page")
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setWidget(root)
