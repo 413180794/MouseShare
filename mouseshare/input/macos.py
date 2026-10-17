@@ -19,6 +19,10 @@ class MacBackend(BaseBackend):
         self._flags = 0
         self._capture_lock = threading.RLock()
         self._mouse_detached = False
+        self._anchor = None
+        self._last_mouse_point = None
+        self._warp_offset = (0, 0)
+        self.cursor_corrections = 0
 
     def capture(self, enabled):
         # Consuming session events alone does not stop the hardware cursor.
@@ -30,6 +34,10 @@ class MacBackend(BaseBackend):
                 # Retain cleanup responsibility even if the native call fails.
                 self._mouse_detached = True
                 try:
+                    point = Q.CGEventGetLocation(Q.CGEventCreate(None))
+                    self._anchor = (point.x, point.y)
+                    self._last_mouse_point = self._anchor
+                    self._warp_offset = (0, 0)
                     result = Q.CGAssociateMouseAndMouseCursorPosition(False)
                     if result != Q.kCGErrorSuccess:
                         raise OSError(f"无法冻结 Mac 本机光标（{result}）")
@@ -39,6 +47,9 @@ class MacBackend(BaseBackend):
                 self.captured = True
             else:
                 self.captured = False
+                self._anchor = None
+                self._last_mouse_point = None
+                self._warp_offset = (0, 0)
                 if self._mouse_detached:
                     try:
                         result = Q.CGAssociateMouseAndMouseCursorPosition(True)
@@ -50,6 +61,46 @@ class MacBackend(BaseBackend):
                         self.error = f"无法恢复 Mac 本机光标（{result}），请重新检查权限"
                     else:
                         self._mouse_detached = False
+
+    def hold_cursor(self, point, dx, dy):
+        """Keep the handoff point even if WindowServer silently reattaches.
+
+        A successful associate(False) only describes that call. Foreground
+        applications and the Dock can restore association later. Read deltas
+        first, then correct any drift before enqueuing remote motion.
+        """
+        with self._capture_lock:
+            if not self.captured or self._anchor is None:
+                return dx, dy
+            current = (point.x, point.y)
+            # Some macOS paths include the preceding warp in the next delta.
+            # Remove it only when the delta agrees with that absolute change;
+            # genuine hardware deltas (including clipped edge motion) survive.
+            if self._last_mouse_point is not None:
+                delta = [dx, dy]
+                for axis in (0, 1):
+                    offset = self._warp_offset[axis]
+                    absolute_change = current[axis] - self._last_mouse_point[axis]
+                    if offset and abs(delta[axis] - absolute_change) < 0.5:
+                        delta[axis] -= offset
+                dx, dy = delta
+            self._warp_offset = (0, 0)
+            self._last_mouse_point = current
+            live = Q.CGEventGetLocation(Q.CGEventCreate(None))
+            before = (live.x, live.y)
+            if abs(before[0] - self._anchor[0]) > 0.5 or abs(before[1] - self._anchor[1]) > 0.5:
+                result = Q.CGWarpMouseCursorPosition(self._anchor)
+                if result != Q.kCGErrorSuccess:
+                    raise OSError(f"无法保持 Mac 光标位置（{result}）")
+                result = Q.CGAssociateMouseAndMouseCursorPosition(False)
+                if result != Q.kCGErrorSuccess:
+                    raise OSError(f"无法保持 Mac 光标冻结（{result}）")
+                restored = Q.CGEventGetLocation(Q.CGEventCreate(None))
+                if abs(restored.x - self._anchor[0]) > 0.5 or abs(restored.y - self._anchor[1]) > 0.5:
+                    raise OSError("Mac 光标冻结未生效，已收回本机控制")
+                self._warp_offset = (self._anchor[0] - before[0], self._anchor[1] - before[1])
+                self.cursor_corrections += 1
+            return dx, dy
 
     def permissions(self, request=False):
         if request:
@@ -140,9 +191,11 @@ class MacBackend(BaseBackend):
             elif kind in (Q.kCGEventMouseMoved, Q.kCGEventLeftMouseDragged,
                           Q.kCGEventRightMouseDragged, Q.kCGEventOtherMouseDragged):
                 point = Q.CGEventGetLocation(event)
+                dx, dy = self.hold_cursor(
+                    point, Q.CGEventGetIntegerValueField(event, Q.kCGMouseEventDeltaX),
+                    Q.CGEventGetIntegerValueField(event, Q.kCGMouseEventDeltaY))
                 message = {"type": "move", "x": point.x, "y": point.y,
-                           "dx": Q.CGEventGetIntegerValueField(event, Q.kCGMouseEventDeltaX),
-                           "dy": Q.CGEventGetIntegerValueField(event, Q.kCGMouseEventDeltaY)}
+                           "dx": dx, "dy": dy}
             else:
                 native_button = Q.CGEventGetIntegerValueField(event, Q.kCGMouseEventButtonNumber)
                 button = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5}.get(native_button)
@@ -152,7 +205,9 @@ class MacBackend(BaseBackend):
                            "down": kind in (Q.kCGEventLeftMouseDown, Q.kCGEventRightMouseDown,
                                             Q.kCGEventOtherMouseDown)}
             return None if self.physical(message) else event
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, OSError):
+                self.error = str(exc)
             self.capture(False)
             self.emit({"type": "command", "action": "panic"})
             return event

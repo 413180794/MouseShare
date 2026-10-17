@@ -61,6 +61,7 @@ class MainWindow(QMainWindow):
         self.build_tray()
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh_peers)
+        self.timer.timeout.connect(self.save_diagnostics)
         self.timer.start(2000)
         if not demo:
             self.backend.start()
@@ -519,6 +520,23 @@ class MainWindow(QMainWindow):
     def selected_id(self):
         return next((peer_id for peer_id, button in getattr(self, "peer_buttons", {}).items()
                      if button.isChecked()), None)
+
+    def save_diagnostics(self):
+        # Opt-in local health snapshot, without keys, pointer paths or peer IDs.
+        if self.demo or not self.settings.get("diagnostics", False):
+            return
+        import json
+        report = {"version": __version__, "state": self.engine.state,
+                  "captured": self.backend.captured, "ready": self.backend.ready(),
+                  "error": self.backend.error,
+                  "cursor_corrections": getattr(self.backend, "cursor_corrections", 0)}
+        path = self.settings.directory / "input-health.json"
+        try:
+            temp = path.with_suffix(".tmp")
+            temp.write_text(json.dumps(report), encoding="utf-8")
+            os.replace(temp, path)
+        except OSError:
+            pass
 
     def connect_selected(self):
         peer_id = self.selected_id()

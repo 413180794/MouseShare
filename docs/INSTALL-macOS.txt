@@ -1,4 +1,4 @@
-MouseShare 0.2.2 — macOS 13+（Apple Silicon / Intel 请下载对应架构）
+MouseShare 0.2.3 — macOS 13+（Apple Silicon / Intel 请下载对应架构）
 
 1. 打开 DMG，把 MouseShare 拖到 Applications（应用程序）。
 2. 从应用程序启动 MouseShare。本预览版使用本机签名，尚无 Apple 开发者公证。

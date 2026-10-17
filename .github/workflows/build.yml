@@ -50,7 +50,7 @@ jobs:
         shell: pwsh
         run: |
           $installDir = Join-Path $env:RUNNER_TEMP 'MouseShare-Install-Test'
-          $setup = Resolve-Path 'dist/MouseShare-0.2.2-Windows-x64-Setup.exe'
+          $setup = Resolve-Path 'dist/MouseShare-0.2.3-Windows-x64-Setup.exe'
           $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=`"$installDir`"", '/TASKS=""')
           $installer = Start-Process $setup -ArgumentList $arguments -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }
