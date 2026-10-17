@@ -1,7 +1,7 @@
 import pytest
 
 from mouseshare.config import Settings
-from mouseshare.engine import Engine
+from mouseshare.engine import Engine, entry_point
 from mouseshare.input.base import NullBackend
 
 
@@ -166,7 +166,7 @@ def test_receiver_return_edge_and_local_takeover(tmp_path):
     now[0] += 0.1
     engine.remote_move(-10, 0)
     assert engine.state == "local"
-    assert {"type": "return"} in engine.session.messages
+    assert {"type": "return", "position": 0.5} in engine.session.messages
     engine.receive({"type": "enter", "edge": "right", "position": 0.5})
     engine.physical({"type": "key", "key": 4, "down": True})
     assert engine.state == "local"
@@ -213,4 +213,45 @@ def test_locked_desktop_revokes_input_and_blocks_handoff(tmp_path):
     now[0] += 1
     engine.tick()
     assert not engine.system_blocked and engine.available
+
+
+@pytest.mark.parametrize("side", ["left", "right", "top", "bottom"])
+@pytest.mark.parametrize("finish", ["return", "panic", "disconnected", "timeout"])
+def test_source_returns_to_edge_with_mapped_position(tmp_path, side, finish):
+    source, now = setup(tmp_path / "source")
+    target, target_now = setup(tmp_path / "target")
+    bounds = (100, 50, 2560, 1440)
+    source.backend.bounds = lambda: bounds
+    source.settings.set(side=side)
+    target.backend.bounds = lambda: (-200, 70, 1920, 1080)
+    position = entry_point(side, 0.25, bounds, inset=0)
+    source.physical({"type": "move", "x": position[0], "y": position[1], "dx": 10, "dy": 10})
+    now[0] += 0.2
+    source.tick()
+    assert source.state == "pending" and source.backend.moves == []
+    target.receive(source.session.messages[-1])
+    if finish != "timeout":
+        source.receive({"type": "entered"})
+    ratio = 0.25
+    if finish == "return":
+        # Return at a different height/width from the original handoff. The
+        # target's normalized position must map back across unequal screens.
+        target.remote_position = entry_point(target.incoming_edge, 0.8, target.backend.bounds(), inset=0)
+        target_now[0] += 1
+        dx, dy = {"left": (10, 0), "right": (-10, 0),
+                  "top": (0, 10), "bottom": (0, -10)}[side]
+        target.remote_move(dx, dy)
+        target_now[0] += 0.1
+        target.remote_move(dx, dy)
+        source.receive(target.session.messages[-1])
+        ratio = 0.8
+    elif finish == "panic":
+        source.handle_command({"action": "panic"})
+    elif finish == "disconnected":
+        source.handle({"type": "disconnected", "session": source.session})
+    else:
+        now[0] += 2
+        source.tick()
+    assert source.state == "local" and not source.backend.captured
+    assert source.backend.moves == [pytest.approx(entry_point(side, ratio, bounds))]
 

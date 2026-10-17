@@ -39,6 +39,8 @@ class Engine:
         self.last_position = (0, 0)
         self.remote_position = (0, 0)
         self.incoming_edge = "left"
+        self.handoff_side = settings.get("side")
+        self.handoff_ratio = 0.5
         self.pending_since = 0
         self.pending_events = []
         self.entered_at = 0
@@ -124,7 +126,7 @@ class Engine:
         self.cooldown = self.clock() + 0.8
         self.armed = False
         if prior in {"sending", "pending"}:
-            self.backend.move(*entry_point(self.settings.get("side"), 0.5, self.backend.bounds(), 30))
+            self.backend.move(*entry_point(self.handoff_side, self.handoff_ratio, self.backend.bounds()))
         if tell_peer and self.session:
             self.session.send({"type": "release"})
 
@@ -243,10 +245,12 @@ class Engine:
             side = self.settings.get("side")
             ratio = (y - top) / max(1, height - 1) if side in {"left", "right"} else (x - left) / max(1, width - 1)
             self.state = "pending"
+            self.handoff_side = side
+            self.handoff_ratio = max(0, min(1, ratio))
             self.pending_since = now
             self.edge_since = None
             self.backend.capture(True)
-            self.send({"type": "enter", "edge": side, "position": max(0, min(1, ratio))})
+            self.send({"type": "enter", "edge": side, "position": self.handoff_ratio})
         self.status()
 
     def receive(self, message):
@@ -257,6 +261,8 @@ class Engine:
         elif kind == "available":
             self.peer_available = True
         elif kind in {"release", "return"}:
+            if kind == "return" and self.state == "sending":
+                self.handoff_ratio = message.get("position", self.handoff_ratio)
             self.release(False)
         elif kind == "enter":
             if not self.available or self.backend.keys or self.backend.buttons:
@@ -308,7 +314,9 @@ class Engine:
                 and not self.backend.injected_keys and not self.backend.injected_buttons):
             self.return_since = self.return_since if self.return_since is not None else self.clock()
             if self.clock() - self.return_since > 0.08:
-                self.send({"type": "return"})
+                ratio = ((y - top) / max(1, height - 1) if self.incoming_edge in {"left", "right"}
+                         else (x - left) / max(1, width - 1))
+                self.send({"type": "return", "position": ratio})
                 self.release(False)
         else:
             self.return_since = None

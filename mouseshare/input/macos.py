@@ -109,9 +109,6 @@ class MacBackend(BaseBackend):
                 message = {"type": "move", "x": point.x, "y": point.y,
                            "dx": Q.CGEventGetIntegerValueField(event, Q.kCGMouseEventDeltaX),
                            "dy": Q.CGEventGetIntegerValueField(event, Q.kCGMouseEventDeltaY)}
-                if self.captured:
-                    x, y, w, h = self.bounds()
-                    self.move(x + w / 2, y + h / 2)
             else:
                 native_button = Q.CGEventGetIntegerValueField(event, Q.kCGMouseEventButtonNumber)
                 button = {0: 1, 1: 2, 2: 3, 3: 4, 4: 5}.get(native_button)

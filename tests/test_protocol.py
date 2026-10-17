@@ -28,8 +28,15 @@ def test_bad_frames(raw):
     {"type": "move", "dx": float("nan"), "dy": 0}, {"type": "move", "dx": 10000, "dy": 0},
     {"type": "enter", "edge": "north", "position": 0.5},
     {"type": "enter", "edge": "left", "position": -0.5},
+    {"type": "return", "position": float("nan")},
+    {"type": "return", "position": -0.1}, {"type": "return", "position": 1.1},
     {"type": "button", "button": 8, "down": True}, {"type": "execute", "command": "anything"},
 ])
 def test_input_validation(message):
     assert not valid_input(message)
+
+
+def test_return_position_is_optional_for_older_peers():
+    assert valid_input({"type": "return"})
+    assert valid_input({"type": "return", "position": 0.8})
 

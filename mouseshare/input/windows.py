@@ -11,6 +11,34 @@ K = C.WinDLL("kernel32", use_last_error=True)
 ULONG_PTR = C.c_size_t
 LRESULT = C.c_ssize_t
 HOOKPROC = C.WINFUNCTYPE(LRESULT, C.c_int, W.WPARAM, W.LPARAM)
+WNDPROC = C.WINFUNCTYPE(LRESULT, W.HWND, W.UINT, W.WPARAM, W.LPARAM)
+
+
+class WindowClass(C.Structure):
+    _fields_ = [("style", W.UINT), ("lpfnWndProc", WNDPROC), ("cbClsExtra", C.c_int),
+                ("cbWndExtra", C.c_int), ("hInstance", W.HINSTANCE), ("hIcon", W.HANDLE),
+                ("hCursor", W.HANDLE), ("hbrBackground", W.HANDLE),
+                ("lpszMenuName", W.LPCWSTR), ("lpszClassName", W.LPCWSTR)]
+
+
+class RawInputDevice(C.Structure):
+    _fields_ = [("usUsagePage", W.USHORT), ("usUsage", W.USHORT),
+                ("dwFlags", W.DWORD), ("hwndTarget", W.HWND)]
+
+
+class RawInputHeader(C.Structure):
+    _fields_ = [("dwType", W.DWORD), ("dwSize", W.DWORD),
+                ("hDevice", W.HANDLE), ("wParam", W.WPARAM)]
+
+
+class RawMouse(C.Structure):
+    # ulButtons represents the aligned button union in RAWMOUSE.
+    _fields_ = [("usFlags", W.USHORT), ("ulButtons", W.ULONG), ("ulRawButtons", W.ULONG),
+                ("lLastX", W.LONG), ("lLastY", W.LONG), ("ulExtraInformation", W.ULONG)]
+
+
+class RawMouseInput(C.Structure):
+    _fields_ = [("header", RawInputHeader), ("mouse", RawMouse)]
 
 
 class MouseHook(C.Structure):
@@ -66,6 +94,23 @@ U.OpenInputDesktop.argtypes = [W.DWORD, W.BOOL, W.DWORD]
 U.OpenInputDesktop.restype = W.HANDLE
 U.GetUserObjectInformationW.argtypes = [W.HANDLE, C.c_int, C.c_void_p, W.DWORD, C.POINTER(W.DWORD)]
 U.CloseDesktop.argtypes = [W.HANDLE]
+U.RegisterClassW.argtypes = [C.POINTER(WindowClass)]
+U.RegisterClassW.restype = W.WORD
+U.UnregisterClassW.argtypes = [W.LPCWSTR, W.HINSTANCE]
+U.CreateWindowExW.argtypes = [W.DWORD, W.LPCWSTR, W.LPCWSTR, W.DWORD,
+                            C.c_int, C.c_int, C.c_int, C.c_int,
+                            W.HWND, W.HMENU, W.HINSTANCE, C.c_void_p]
+U.CreateWindowExW.restype = W.HWND
+U.DestroyWindow.argtypes = [W.HWND]
+U.DefWindowProcW.argtypes = [W.HWND, W.UINT, W.WPARAM, W.LPARAM]
+U.DefWindowProcW.restype = LRESULT
+U.RegisterRawInputDevices.argtypes = [C.POINTER(RawInputDevice), W.UINT, W.UINT]
+U.GetRawInputData.argtypes = [W.HANDLE, W.UINT, C.c_void_p, C.POINTER(W.UINT), W.UINT]
+U.GetRawInputData.restype = W.UINT
+U.GetMessageW.argtypes = [C.POINTER(W.MSG), W.HWND, W.UINT, W.UINT]
+U.TranslateMessage.argtypes = [C.POINTER(W.MSG)]
+U.DispatchMessageW.argtypes = [C.POINTER(W.MSG)]
+U.DispatchMessageW.restype = LRESULT
 K.GetModuleHandleW.argtypes = [W.LPCWSTR]
 K.GetModuleHandleW.restype = W.HMODULE
 K.OpenProcess.argtypes = [W.DWORD, W.BOOL, W.DWORD]
@@ -81,9 +126,9 @@ class MonitorInfo(C.Structure):
 class WindowsBackend(BaseBackend):
     def __init__(self, emit):
         super().__init__(emit)
-        self.anchor = (0, 0)
-        self.recenter_pending = False
         self.last = None
+        self.raw_absolute = {}
+        self.raw_window = None
         self.thread_id = 0
         self.started = threading.Event()
         self.mouse_hook = self.key_hook = None
@@ -92,7 +137,10 @@ class WindowsBackend(BaseBackend):
         return (0, 0, U.GetSystemMetrics(0), U.GetSystemMetrics(1))
 
     def start(self):
+        if self.running:
+            return
         self.error = ""
+        self.started.clear()
         threading.Thread(target=self.run, daemon=True, name="Windows-input-hooks").start()
         self.started.wait(3)
 
@@ -100,37 +148,95 @@ class WindowsBackend(BaseBackend):
         self.thread_id = K.GetCurrentThreadId()
         self._mouse_callback = HOOKPROC(self.mouse_proc)
         self._key_callback = HOOKPROC(self.key_proc)
+        self._window_callback = WNDPROC(self.window_proc)
         module = K.GetModuleHandleW(None)
-        self.mouse_hook = U.SetWindowsHookExW(14, self._mouse_callback, module, 0)
-        self.key_hook = U.SetWindowsHookExW(13, self._key_callback, module, 0)
-        self.running = bool(self.mouse_hook and self.key_hook)
-        if not self.running:
-            self.error = "无法安装 Windows 输入钩子，请重启 MouseShare"
-        self.started.set()
+        class_name = f"MouseShareRawInput-{id(self)}"
+        registered = False
         try:
+            window_class = WindowClass(lpfnWndProc=self._window_callback,
+                                       hInstance=module, lpszClassName=class_name)
+            registered = bool(U.RegisterClassW(C.byref(window_class)))
+            if not registered:
+                raise C.WinError(C.get_last_error())
+            self.raw_window = U.CreateWindowExW(0, class_name, "", 0, 0, 0, 0, 0,
+                                               W.HWND(-3), None, module, None)
+            if not self.raw_window:
+                raise C.WinError(C.get_last_error())
+            device = RawInputDevice(1, 2, 0x100, self.raw_window)  # RIDEV_INPUTSINK
+            if not U.RegisterRawInputDevices(C.byref(device), 1, C.sizeof(device)):
+                raise C.WinError(C.get_last_error())
+            self.mouse_hook = U.SetWindowsHookExW(14, self._mouse_callback, module, 0)
+            self.key_hook = U.SetWindowsHookExW(13, self._key_callback, module, 0)
+            if not self.mouse_hook or not self.key_hook:
+                raise C.WinError(C.get_last_error())
+            self.running = True
+            self.started.set()
             msg = W.MSG()
             while self.running and U.GetMessageW(C.byref(msg), None, 0, 0) > 0:
                 U.TranslateMessage(C.byref(msg))
                 U.DispatchMessageW(C.byref(msg))
+        except OSError:
+            self.error = "无法启动 Windows 原始鼠标输入，请重启 MouseShare"
         finally:
             for hook in (self.mouse_hook, self.key_hook):
                 if hook:
                     U.UnhookWindowsHookEx(hook)
+            if self.raw_window:
+                device = RawInputDevice(1, 2, 1, None)  # RIDEV_REMOVE
+                U.RegisterRawInputDevices(C.byref(device), 1, C.sizeof(device))
+                U.DestroyWindow(self.raw_window)
+                self.raw_window = None
+            if registered:
+                U.UnregisterClassW(class_name, module)
             self.running = False
             self.captured = False
+            self.started.set()
 
     def capture(self, enabled):
-        if enabled and not self.captured:
-            x, y, width, height = self.bounds()
-            self.anchor = (x + width // 2, y + height // 2)
-            self.captured = True
-            self.recenter_pending = True
-            self.move(*self.anchor)
-        else:
-            self.captured = enabled
-            if not enabled:
-                self.recenter_pending = False
+        self.captured = enabled
+        self.raw_absolute.clear()
         self.last = None
+
+    def window_proc(self, hwnd, msg, wparam, lparam):
+        if msg == 0x00FF:  # WM_INPUT
+            try:
+                size = W.UINT()
+                header_size = C.sizeof(RawInputHeader)
+                if U.GetRawInputData(lparam, 0x10000003, None, C.byref(size), header_size) != 0:
+                    raise OSError("Raw input size unavailable")
+                if not header_size <= size.value <= 65536:
+                    raise OSError("Invalid raw input size")
+                buffer = C.create_string_buffer(size.value)
+                count = U.GetRawInputData(lparam, 0x10000003, buffer, C.byref(size), header_size)
+                if count != size.value:
+                    raise OSError("Raw input read failed")
+                if count >= C.sizeof(RawMouseInput):
+                    packet = C.cast(buffer, C.POINTER(RawMouseInput)).contents
+                    if packet.header.dwType == 0 and packet.header.dwSize == count:
+                        self.raw_motion(packet.mouse, packet.header.hDevice)
+            except Exception:
+                self.capture(False)
+                self.emit({"type": "command", "action": "panic"})
+        # Required for foreground WM_INPUT cleanup, also handles window creation.
+        return U.DefWindowProcW(hwnd, msg, wparam, lparam)
+
+    def raw_motion(self, mouse, device):
+        if not self.captured or mouse.ulExtraInformation == MARKER:
+            return
+        dx, dy = mouse.lLastX, mouse.lLastY
+        if mouse.usFlags & 1:  # absolute devices (tablets / some remote sessions)
+            metrics = (76, 77, 78, 79) if mouse.usFlags & 2 else (None, None, 0, 1)
+            width, height = U.GetSystemMetrics(metrics[2]), U.GetSystemMetrics(metrics[3])
+            point = (dx * max(1, width - 1) / 65535, dy * max(1, height - 1) / 65535)
+            previous = self.raw_absolute.get(device)
+            self.raw_absolute[device] = point
+            if previous is None:
+                return
+            dx, dy = point[0] - previous[0], point[1] - previous[1]
+        if dx or dy:
+            # Raw deltas remain available at the screen edge. The LL hook below
+            # suppresses the local pointer; no recenter/warp is involved.
+            self.physical({"type": "move", "x": 0, "y": 0, "dx": dx, "dy": dy})
 
     def mouse_proc(self, code, msg, pointer):
         if code < 0:
@@ -138,29 +244,15 @@ class WindowsBackend(BaseBackend):
         try:
             data = C.cast(pointer, C.POINTER(MouseHook)).contents
             if data.dwExtraInfo == MARKER:
-                # SendInput is asynchronous relative to the hook thread. Until
-                # our own warp reaches the hook, physical points may still be
-                # relative to the old screen edge, yielding a half-screen delta.
-                if (msg == 0x0200 and self.captured and self.recenter_pending
-                        and abs(data.pt.x - self.anchor[0]) <= 1
-                        and abs(data.pt.y - self.anchor[1]) <= 1):
-                    self.recenter_pending = False
                 return U.CallNextHookEx(None, code, msg, pointer)
             if data.flags & 1:
                 return U.CallNextHookEx(None, code, msg, pointer)
             x, y = data.pt.x, data.pt.y
             if msg == 0x0200:
                 if self.captured:
-                    if self.recenter_pending:
-                        return 1
-                    dx, dy = x - self.anchor[0], y - self.anchor[1]
-                    if dx == 0 and dy == 0:
-                        return 1
-                    self.recenter_pending = True
-                    self.move(*self.anchor)
-                else:
-                    dx, dy = (0, 0) if self.last is None else (x - self.last[0], y - self.last[1])
-                    self.last = (x, y)
+                    return 1
+                dx, dy = (0, 0) if self.last is None else (x - self.last[0], y - self.last[1])
+                self.last = (x, y)
                 event = {"type": "move", "x": x, "y": y, "dx": dx, "dy": dy}
             elif msg in (0x020A, 0x020E):
                 amount = C.c_short(data.mouseData >> 16).value / 120

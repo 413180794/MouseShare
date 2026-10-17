@@ -69,5 +69,7 @@ def valid_input(message):
         return number(message.get("dx"), -100, 100) and number(message.get("dy"), -100, 100)
     if kind == "enter":
         return message.get("edge") in SIDES and number(message.get("position"), 0, 1)
-    return kind in {"entered", "release", "return", "ping", "pong", "blocked", "available"}
+    if kind == "return":
+        return "position" not in message or number(message["position"], 0, 1)
+    return kind in {"entered", "release", "ping", "pong", "blocked", "available"}
 
