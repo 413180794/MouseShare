@@ -87,6 +87,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          # A manually published release may have already used the verified
+          # main-branch artifacts. Preserve its package/checksum identities.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release already published; keeping verified assets."
+            exit 0
+          fi
           cd packages
           sha256sum -- * > SHA256SUMS.txt
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \

@@ -367,9 +367,9 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "connect_button"):
             return
         selected = self.selected_id()
-        connected = bool(self.network.session)
-        self.connect_button.setEnabled(bool(selected) and not connected)
-        self.connect_button.setText("已连接" if connected else "配对并连接")
+        session = self.network.session
+        self.connect_button.setEnabled(bool(selected) and not session)
+        self.connect_button.setText("已连接" if session and session.connected else "连接中…" if session else "配对并连接")
         self.forget_button.setEnabled(selected in self.settings.get("peers"))
 
     def update_map(self):
@@ -431,7 +431,7 @@ class MainWindow(QMainWindow):
         self.pause_button.setText("恢复共享" if state["paused"] else "暂停共享")
         peer = state["peer_name"]
         if not state["ready"]:
-            title, detail = "等待系统授权", state["error"] or "请点击下方按钮检查权限。"
+            title, detail = "等待系统授权", state["error"] or "请点击侧栏的系统权限按钮检查。"
         elif state["game"]:
             title, detail = "游戏模式 · 键鼠锁定本机", state["auto_reason"] or "手动游戏模式已开启；再次按快捷键即可关闭。"
         elif state.get("system_blocked"):
@@ -556,6 +556,7 @@ class MainWindow(QMainWindow):
         layout.setSpacing(18)
         name = QLabel(f"请求连接：{session.peer_name}")
         name.setTextFormat(Qt.TextFormat.PlainText)
+        name.setWordWrap(True)
         layout.addWidget(name)
         code = QLabel(f"{session.code[:3]}  {session.code[3:]}")
         code.setStyleSheet("font-size: 48px; font-weight: 700; color: #167c67; padding: 18px;")
