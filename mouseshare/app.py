@@ -539,7 +539,8 @@ class MainWindow(QMainWindow):
             if state["paused"] or state.get("system_blocked") else ("已连接", "active")
             if state["connected"] else ("等待连接", "idle"))
         self.status_badge.set_status(*badge)
-        self.permission_button.setText("系统权限 · 已就绪" if state["ready"] else "系统权限 · 待授权")
+        self.permission_button.setText("系统权限 · 已就绪" if state["ready"] else
+                                       "系统权限 · 待授权" if need_permission else "输入服务 · 待检查")
         self.permission_cta.setText("设置键鼠权限" if need_permission else "检查输入服务")
         if self.permission_button.property("tone") != ("" if state["ready"] else "warning"):
             self.permission_button.setProperty("tone", "" if state["ready"] else "warning")
