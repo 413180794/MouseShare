@@ -49,6 +49,8 @@ class Discovery:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self.sock = sock
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if platform.system() != "Windows" and hasattr(socket, "SO_REUSEPORT"):
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
             sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
             sock.bind(("", DISCOVERY_PORT))

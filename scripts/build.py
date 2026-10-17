@@ -67,15 +67,17 @@ def licenses(destination):
                        "license": dist.metadata.get("License-Expression") or dist.metadata.get("License", ""),
                        "home": dist.metadata.get("Home-page", "")})
         for file in dist.files or []:
-            if any(part.lower().startswith(("license", "copying", "copyright")) for part in file.parts):
+            if (file.name.lower().startswith(("license", "copying", "copyright"))
+                    and file.suffix.lower() not in {".so", ".dll", ".py", ".yml", ".plist"}):
                 source = dist.locate_file(file)
                 if source.is_file():
-                    target = destination / name / Path(file).name
+                    target = destination / name / file
                     target.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(source, target)
     (destination / "dependencies.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     for name in ["LICENSE", "THIRD_PARTY.md"]:
         shutil.copyfile(ROOT / name, destination / name)
+    shutil.copytree(ROOT / "licenses", destination / "upstream", dirs_exist_ok=True)
 
 
 def main():
