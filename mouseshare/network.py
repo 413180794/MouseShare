@@ -119,6 +119,8 @@ class Session:
     def approve(self, accepted):
         self.accepted = accepted
         self.approval.set()
+        if not accepted:
+            self.stop()
 
     def send(self, message):
         if self.stopped.is_set() or not self.connected:
@@ -172,6 +174,7 @@ class Session:
         remote_cert.public_key().verify(unb64(signed.get("signature")), proof, ec.ECDSA(hashes.SHA256()))
         self.code = pairing_code(proof)
         trusted = self.peer_id in self.owner.settings.get("peers")
+        remote_confirmation = None
         if trusted:
             self.accepted = True
         else:
@@ -180,11 +183,17 @@ class Session:
             while not self.approval.wait(0.2):
                 if self.stopped.is_set() or self.owner.stopped.is_set() or time.monotonic() > deadline:
                     raise TimeoutError("Pairing expired")
+                if remote_confirmation is None and (self.sock.pending()
+                        or select.select([self.sock], [], [], 0)[0]):
+                    remote_confirmation = recv_frame(self.sock)
+                    if (remote_confirmation.get("type") != "confirm"
+                            or remote_confirmation.get("accepted") is not True):
+                        raise ProtocolError("Pairing declined")
         if self.stopped.is_set():
             raise ConnectionError("Pairing cancelled")
         self.sock.settimeout(125)
         self.sock.sendall(frame({"type": "confirm", "accepted": self.accepted}))
-        confirmation = recv_frame(self.sock)
+        confirmation = remote_confirmation or recv_frame(self.sock)
         if confirmation.get("type") != "confirm" or confirmation.get("accepted") is not True or not self.accepted:
             raise ProtocolError("Pairing declined")
         self.owner.settings.trust(self.peer_id, self.peer_name, self.sock.getpeername()[0])

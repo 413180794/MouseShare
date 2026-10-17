@@ -85,6 +85,20 @@ def test_discovery_identity_spoof_is_rejected_before_pairing(tmp_path):
         b.stop()
 
 
+def test_reject_dismisses_other_side_without_waiting_for_approval(tmp_path):
+    a, ap, ac, am, ad = make_network(tmp_path / "a", False)
+    b, bp, bc, bm, bd = make_network(tmp_path / "b", False)
+    try:
+        a.connect("127.0.0.1", b.port, b.identity.id)
+        wait_for(lambda: ap and bp)
+        ap[0].approve(False)
+        wait_for(lambda: ad and bd, timeout=2)
+        assert not ac and not bc
+    finally:
+        a.stop()
+        b.stop()
+
+
 def test_invalid_input_closes_authenticated_connection(tmp_path):
     a, ap, ac, am, ad = make_network(tmp_path / "a")
     b, bp, bc, bm, bd = make_network(tmp_path / "b")

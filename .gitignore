@@ -9,4 +9,5 @@ artifacts/
 .DS_Store
 *.egg-info/
 .coverage
+*.spec
 
