@@ -17,6 +17,39 @@ class MacBackend(BaseBackend):
         self.tap = None
         self.started = threading.Event()
         self._flags = 0
+        self._capture_lock = threading.RLock()
+        self._mouse_detached = False
+
+    def capture(self, enabled):
+        # Consuming session events alone does not stop the hardware cursor.
+        # Detach it while forwarding HID deltas, keeping the handoff position.
+        with self._capture_lock:
+            if enabled:
+                if self.captured:
+                    return
+                # Retain cleanup responsibility even if the native call fails.
+                self._mouse_detached = True
+                try:
+                    result = Q.CGAssociateMouseAndMouseCursorPosition(False)
+                    if result != Q.kCGErrorSuccess:
+                        raise OSError(f"无法冻结 Mac 本机光标（{result}）")
+                except Exception:
+                    self.capture(False)
+                    raise
+                self.captured = True
+            else:
+                self.captured = False
+                if self._mouse_detached:
+                    try:
+                        result = Q.CGAssociateMouseAndMouseCursorPosition(True)
+                    except Exception:
+                        self.error = "恢复 Mac 本机光标失败，请重新检查权限或重启 MouseShare"
+                        return
+                    if result != Q.kCGErrorSuccess:
+                        # Keep the flag set so stop/finally can retry restoration.
+                        self.error = f"无法恢复 Mac 本机光标（{result}），请重新检查权限"
+                    else:
+                        self._mouse_detached = False
 
     def permissions(self, request=False):
         if request:
@@ -52,7 +85,7 @@ class MacBackend(BaseBackend):
                  Q.kCGEventOtherMouseDown, Q.kCGEventOtherMouseUp, Q.kCGEventScrollWheel]
         mask = sum(1 << kind for kind in kinds)
         self._callback = self.callback
-        self.tap = Q.CGEventTapCreate(Q.kCGSessionEventTap, Q.kCGHeadInsertEventTap,
+        self.tap = Q.CGEventTapCreate(Q.kCGHIDEventTap, Q.kCGHeadInsertEventTap,
                                      Q.kCGEventTapOptionDefault, mask, self._callback, None)
         if self.tap is None:
             self.error = "输入监听启动失败，请检查权限并重启 MouseShare"
@@ -67,12 +100,13 @@ class MacBackend(BaseBackend):
             while self.running:
                 CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, False)
         finally:
-            self.captured = False
+            self.capture(False)
+            self.running = False
             Q.CGEventTapEnable(self.tap, False)
 
     def callback(self, proxy, kind, event, refcon):
         if kind in (Q.kCGEventTapDisabledByTimeout, Q.kCGEventTapDisabledByUserInput):
-            self.captured = False
+            self.capture(False)
             self.emit({"type": "command", "action": "panic"})
             Q.CGEventTapEnable(self.tap, True)
             return event
@@ -119,7 +153,7 @@ class MacBackend(BaseBackend):
                                             Q.kCGEventOtherMouseDown)}
             return None if self.physical(message) else event
         except Exception:
-            self.captured = False
+            self.capture(False)
             self.emit({"type": "command", "action": "panic"})
             return event
 

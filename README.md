@@ -4,7 +4,7 @@ Windows / macOS 局域网鼠标键盘共享。鼠标在指定屏幕边缘稍作�
 
 [下载安装包](https://github.com/413180794/MouseShare/releases) · [构建记录](https://github.com/413180794/MouseShare/actions) · [双机验收清单](docs/ACCEPTANCE.md)
 
-**v0.2.1 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
+**v0.2.2 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
 
 ![MouseShare 界面示意，设备数据为演示数据](docs/screenshot.png)
 
@@ -12,10 +12,10 @@ Windows / macOS 局域网鼠标键盘共享。鼠标在指定屏幕边缘稍作�
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.2.1-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
-| Apple Silicon Mac，macOS 13+ | `MouseShare-0.2.1-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Intel Mac，macOS 13+ | `MouseShare-0.2.1-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Windows 便携版 | `MouseShare-0.2.1-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
+| Windows 10/11 x64 | `MouseShare-0.2.2-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
+| Apple Silicon Mac，macOS 13+ | `MouseShare-0.2.2-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Intel Mac，macOS 13+ | `MouseShare-0.2.2-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Windows 便携版 | `MouseShare-0.2.2-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
 

@@ -98,7 +98,8 @@ def test_mac_capture_forwards_delta_without_warping_source(monkeypatch):
 
     from mouseshare.input.macos import Q, MacBackend
 
-    events, warps = [], []
+    events, warps, association = [], [], []
+    monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", lambda enabled: association.append(enabled) or 0)
     backend = MacBackend(events.append)
     backend.capture(True)
     monkeypatch.setattr(backend, "move", lambda x, y: warps.append((x, y)))
@@ -109,4 +110,138 @@ def test_mac_capture_forwards_delta_without_warping_source(monkeypatch):
     assert backend.callback(None, Q.kCGEventMouseMoved, object(), None) is None
     assert (events[-1]["dx"], events[-1]["dy"]) == (-17, 6)
     assert warps == []
+    assert association == [False]
+    backend.capture(False)
+    assert association == [False, True]
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz cursor ownership")
+@pytest.mark.parametrize("finish", ["return", "panic", "game", "pause", "disconnected", "timeout", "stop"])
+def test_mac_cursor_association_restored_on_all_ownership_exits(tmp_path, monkeypatch, finish):
+    from mouseshare.config import Settings
+    from mouseshare.engine import Engine
+    from mouseshare.input.macos import Q, MacBackend
+    from types import SimpleNamespace
+
+    association, moves = [], []
+    monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", lambda enabled: association.append(enabled) or 0)
+    now = [10.0]
+    engine = Engine(Settings(tmp_path), clock=lambda: now[0])
+    engine.backend = MacBackend(engine.enqueue)
+    monkeypatch.setattr(engine.backend, "move", lambda x, y: moves.append((x, y)))
+    monkeypatch.setattr(engine.backend, "bounds", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(engine.backend, "desktop_active", lambda: True)
+    engine.session = SimpleNamespace(send=lambda message: True, peer_name="Other computer")
+    engine.state = "pending" if finish == "timeout" else "sending"
+    engine.pending_since = now[0]
+    engine.backend.capture(True)
+    engine.backend.capture(True)
+    assert association == [False] and not moves
+    if finish == "return":
+        engine.receive({"type": "return", "position": .75})
+    elif finish == "disconnected":
+        engine.handle({"type": "disconnected", "session": engine.session})
+    elif finish == "timeout":
+        now[0] += 2
+        engine.tick()
+    else:
+        engine.handle_command({"action": finish})
+    engine.backend.stop()
+    assert association == [False, True]
+    assert not engine.backend.captured and not engine.backend._mouse_detached
+    assert len(moves) == 1
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz cursor recovery")
+@pytest.mark.parametrize("failure", ["tap_timeout", "tap_disabled", "callback", "queue_full", "hotkey"])
+def test_mac_native_failures_restore_local_cursor(monkeypatch, failure):
+    from mouseshare.input.macos import Q, MacBackend
+
+    association, events = [], []
+    monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", lambda enabled: association.append(enabled) or 0)
+    monkeypatch.setattr(Q, "CGEventTapEnable", lambda tap, enabled: None)
+    backend = MacBackend(events.append)
+    backend.capture(True)
+    if failure in {"tap_timeout", "tap_disabled"}:
+        kind = Q.kCGEventTapDisabledByTimeout if failure == "tap_timeout" else Q.kCGEventTapDisabledByUserInput
+        backend.callback(None, kind, None, None)
+        assert events[-1] == {"type": "command", "action": "panic"}
+    elif failure == "callback":
+        monkeypatch.setattr(Q, "CGEventGetIntegerValueField", lambda event, field: 0)
+        monkeypatch.setattr(Q, "CGEventGetLocation", lambda event: (_ for _ in ()).throw(ValueError("test")))
+        backend.callback(None, Q.kCGEventMouseMoved, object(), None)
+        assert events[-1] == {"type": "command", "action": "panic"}
+    elif failure == "queue_full":
+        backend.emit = lambda event: False
+        assert not backend.physical({"type": "move", "x": 0, "y": 500, "dx": 10, "dy": 1})
+    else:
+        for key in [224, 226, 41]:
+            backend.physical({"type": "key", "key": key, "down": True})
+        assert events[-1] == {"type": "command", "action": "panic"}
+    assert association == [False, True] and not backend.captured
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz cursor API failure")
+def test_mac_failed_cursor_detach_aborts_capture_and_restores(monkeypatch):
+    from mouseshare.input.macos import Q, MacBackend
+
+    association = []
+    def associate(enabled):
+        association.append(enabled)
+        return 0 if enabled else 1000
+    monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", associate)
+    backend = MacBackend(lambda event: True)
+    with pytest.raises(OSError):
+        backend.capture(True)
+    assert association == [False, True]
+    assert not backend.captured and not backend._mouse_detached
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz cursor restore retry")
+@pytest.mark.parametrize("raises", [False, True])
+def test_mac_cursor_restore_failure_can_be_retried(monkeypatch, raises):
+    from mouseshare.input.macos import Q, MacBackend
+
+    calls = []
+    def associate(enabled):
+        calls.append(enabled)
+        if len(calls) == 2:
+            if raises:
+                raise OSError("test")
+            return 1000
+        return 0
+    monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", associate)
+    backend = MacBackend(lambda event: True)
+    backend.capture(True)
+    backend.capture(False)
+    assert not backend.captured and backend._mouse_detached and backend.error
+    backend.stop()
+    assert calls == [False, True, True] and not backend._mouse_detached
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Quartz HID tap lifecycle")
+def test_mac_tap_uses_hid_location_and_restores_capture_on_loop_failure(monkeypatch):
+    from mouseshare.input.macos import Q, MacBackend
+    import mouseshare.input.macos as native
+
+    locations, association, enabled = [], [], []
+    monkeypatch.setattr(Q, "CGAssociateMouseAndMouseCursorPosition", lambda value: association.append(value) or 0)
+    backend = MacBackend(lambda event: True)
+    def create(location, *args):
+        locations.append(location)
+        return object()
+    monkeypatch.setattr(Q, "CGEventTapCreate", create)
+    monkeypatch.setattr(Q, "CGEventTapEnable", lambda tap, value: enabled.append(value))
+    monkeypatch.setattr(native, "CFMachPortCreateRunLoopSource", lambda *args: object())
+    monkeypatch.setattr(native, "CFRunLoopGetCurrent", lambda: object())
+    monkeypatch.setattr(native, "CFRunLoopAddSource", lambda *args: None)
+    def loop(*args):
+        backend.capture(True)
+        raise RuntimeError("test")
+    monkeypatch.setattr(native, "CFRunLoopRunInMode", loop)
+    with pytest.raises(RuntimeError):
+        backend.run()
+    assert locations == [Q.kCGHIDEventTap]
+    assert association == [False, True] and enabled == [True, False]
+    assert not backend.captured and not backend.running
 
