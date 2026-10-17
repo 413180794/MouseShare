@@ -1,5 +1,6 @@
 """UI reorganizations must preserve saved pairing and all sharing controls."""
 import os
+import time
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -68,3 +69,25 @@ def test_game_and_recovery_controls_keep_engine_commands(window, app):
     app.processEvents()
     footer = window.saved_labels[0].parentWidget()
     assert footer.isVisible() and footer.geometry().bottom() < window.stack.height()
+
+
+def test_discovery_updates_preserve_selected_accessible_device(window, app):
+    peer_id = "a" * 64
+    window.refresh_peers()
+    button = window.peer_buttons[peer_id]
+    window.found_peer(dict(id=peer_id, name="Renamed PC", host="192.168.1.30", port=24872,
+                           os="Windows", seen=time.monotonic()))
+    for _ in range(3):
+        window.refresh_peers()
+        app.processEvents()
+        assert window.peer_buttons[peer_id] is button
+        assert window.selected_id() == peer_id
+    assert "Renamed PC" in button.text() and "192.168.1.30" in button.text()
+    assert "Renamed PC" in button.accessibleName()
+    other = "b" * 64
+    window.found_peer(dict(id=other, name="Temporary PC", host="192.168.1.40", port=24872,
+                           os="Windows", seen=time.monotonic()))
+    window.peers[other]["seen"] -= 10
+    window.refresh_peers()
+    assert len(window.peer_buttons) == 1 and window.selected_id() == peer_id
+    assert window.peer_buttons[peer_id] is button

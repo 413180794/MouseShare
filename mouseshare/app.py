@@ -8,12 +8,12 @@ import sys
 import time
 
 from PySide6.QtCore import QObject, QSize, QTimer, Qt, QUrl, Signal
-from PySide6.QtGui import QAction, QColor, QDesktopServices
+from PySide6.QtGui import QAction, QDesktopServices
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
-from PySide6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog,
-                               QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout, QHeaderView,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QDialog,
+                               QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout,
                                QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPushButton,
-                               QSpinBox, QSystemTrayIcon, QTableWidget, QTableWidgetItem, QStackedWidget, QButtonGroup,
+                               QSpinBox, QSystemTrayIcon, QStackedWidget, QButtonGroup,
                                QVBoxLayout, QWidget, QScrollArea)
 
 from . import __version__
@@ -207,23 +207,13 @@ class MainWindow(QMainWindow):
         self.discovery_label = text_label("自动发现已开启", "hint")
         top.addWidget(self.discovery_label)
         body.addLayout(top)
-        self.table = QTableWidget(0, 4)
-        self.table.setHorizontalHeaderLabels(["设备名称", "系统", "局域网地址", "连接状态"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setDefaultAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.table.verticalHeader().hide()
-        self.table.verticalHeader().setDefaultSectionSize(45)
-        self.table.setShowGrid(False)
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.setFixedHeight(100)
-        self.table.doubleClicked.connect(self.connect_selected)
-        self.table.itemSelectionChanged.connect(self.update_actions)
-        body.addWidget(self.table)
+        self.peer_buttons = {}
+        self.peer_group = QButtonGroup(self)
+        self.peer_group.setExclusive(True)
+        self.peer_group.buttonClicked.connect(self.update_actions)
+        self.peer_list = QVBoxLayout()
+        self.peer_list.setSpacing(6)
+        body.addLayout(self.peer_list)
         self.empty_label = text_label("在另一台电脑上打开 MouseShare，设备会自动出现在这里。", "hint", True)
         self.empty_label.setContentsMargins(4, 18, 4, 18)
         body.addWidget(self.empty_label)
@@ -481,28 +471,44 @@ class MainWindow(QMainWindow):
         rows = {key: dict(value, id=key, os="", seen=0) for key, value in trusted.items()}
         rows.update({key: peer for key, peer in self.peers.items()
                      if time.monotonic() - peer["seen"] < 8})
-        self.row_ids = list(rows)
-        self.table.setRowCount(len(rows))
-        for row, (peer_id, peer) in enumerate(rows.items()):
+        # Native buttons avoid Qt's Cocoa table selected-children bridge crash.
+        # Keep them stable through periodic discovery updates and retain selection.
+        for peer_id in list(self.peer_buttons):
+            if peer_id not in rows:
+                button = self.peer_buttons.pop(peer_id)
+                self.peer_group.removeButton(button)
+                self.peer_list.removeWidget(button)
+                button.hide()
+                button.deleteLater()
+        for peer_id, peer in rows.items():
+            button = self.peer_buttons.get(peer_id)
+            if button is None:
+                button = QPushButton()
+                button.setObjectName("peer")
+                button.setCheckable(True)
+                button.setMinimumHeight(68)
+                self.peer_buttons[peer_id] = button
+                self.peer_group.addButton(button)
+                self.peer_list.addWidget(button)
             status = "已配对" if peer_id in trusted else "待配对"
             session = self.network.session
             if session and session.peer_id == peer_id:
                 status = "已连接" if session.connected else "连接中"
             elif not peer.get("seen"):
                 status = "离线 · 已配对"
-            for column, value in enumerate([peer.get("name", "电脑"),
-                                            {"Darwin": "macOS", "Windows": "Windows"}.get(peer.get("os"), "—"),
-                                            peer.get("host", ""), status]):
-                item = QTableWidgetItem(str(value))
-                if column == 3:
-                    item.setForeground(QColor("#18775b" if status == "已连接" else "#819183"))
-                self.table.setItem(row, column, item)
+            os_name = {"Darwin": "macOS", "Windows": "Windows"}.get(peer.get("os"), "电脑")
+            name = peer.get("name", "电脑")
+            short_name = name if len(name) <= 30 else name[:29] + "…"
+            label = f"{short_name}  ·  {os_name}\n{peer.get('host', '')}  ·  {status}"
+            button.setText(label)
+            full_label = f"{name}，{os_name}，{peer.get('host', '')}，{status}"
+            button.setAccessibleName(full_label)
+            button.setToolTip(full_label)
             if peer_id == selected:
-                self.table.selectRow(row)
-        self.table.setVisible(bool(rows))
+                button.setChecked(True)
         self.empty_label.setVisible(not rows)
-        if rows and self.table.currentRow() < 0:
-            self.table.selectRow(0)
+        if rows and not self.peer_group.checkedButton():
+            next(iter(self.peer_buttons.values())).setChecked(True)
         self.discovery_label.setText(f"{len(rows)} 台设备 · 自动发现" if rows else "正在自动发现…")
         self.update_map()
         self.update_actions()
@@ -511,8 +517,8 @@ class MainWindow(QMainWindow):
                 self.dialogs[key][0].reject()
 
     def selected_id(self):
-        row = self.table.currentRow() if hasattr(self, "table") else -1
-        return self.row_ids[row] if hasattr(self, "row_ids") and 0 <= row < len(self.row_ids) else None
+        return next((peer_id for peer_id, button in getattr(self, "peer_buttons", {}).items()
+                     if button.isChecked()), None)
 
     def connect_selected(self):
         peer_id = self.selected_id()

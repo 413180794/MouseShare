@@ -1,7 +1,9 @@
 """Presentation-only desktop widgets. No input capture or network behavior lives here."""
+from pathlib import Path
+
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPalette, QPen
-from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QLabel, QProxyStyle, QStyle, QVBoxLayout, QWidget
 
 STYLE = """
 QWidget { color: #233d39; font-size: 13px; }
@@ -42,16 +44,20 @@ QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox { background: #fafcf9; color: #29
     selection-background-color: #c6e4d4; selection-color: #174a36; }
 QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus { border-color: #298870; }
 QComboBox QAbstractItemView { background: #ffffff; color: #29433a; selection-background-color: #e0ede2; }
+QComboBox::drop-down { border: 0; width: 28px; }
+QComboBox::down-arrow { image: url("@assets@/chevron-down.png"); width: 14px; height: 14px; }
+QSpinBox::up-button, QDoubleSpinBox::up-button { border: 0; width: 22px; subcontrol-origin: border; subcontrol-position: top right; }
+QSpinBox::down-button, QDoubleSpinBox::down-button { border: 0; width: 22px; subcontrol-origin: border; subcontrol-position: bottom right; }
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow { image: url("@assets@/chevron-up.png"); width: 12px; height: 12px; }
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow { image: url("@assets@/chevron-down.png"); width: 12px; height: 12px; }
 QScrollArea { background: transparent; border: 0; }
 QScrollBar:vertical { background: transparent; width: 8px; margin: 3px 1px; }
 QScrollBar::handle:vertical { background: #cbd6cb; border-radius: 3px; min-height: 28px; }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
-QTableWidget { background: #ffffff; border: 0; gridline-color: #edf1eb; outline: 0;
-    selection-background-color: #eff6ee; selection-color: #204a35; }
-QTableWidget::item { padding: 8px; border-bottom: 1px solid #edf1eb; }
-QTableWidget::item:selected { background: #eff6ee; color: #204a35; }
-QHeaderView::section { background: #ffffff; border: 0; color: #8a968d; padding: 8px; font-size: 11px; text-align: left; }
+QPushButton#peer { text-align: left; background: #fafcf9; padding: 10px 16px; font-weight: 400; }
+QPushButton#peer:checked { background: #eff6ee; border-color: #8db8a0; color: #204a35; }
+QPushButton#peer:hover, QPushButton#peer:focus { border-color: #20836c; }
 QCheckBox { spacing: 10px; padding: 5px 0; }
 QMenu { background: #ffffff; border: 1px solid #dae3da; padding: 5px; }
 QMenu::item { padding: 9px 20px; border-radius: 4px; }
@@ -60,10 +66,49 @@ QToolTip { color: #ffffff; background: #244b3a; border: 0; padding: 6px; }
 """
 
 
+class DesktopStyle(QProxyStyle):
+    """Paint essential indicators without an optional SVG image plugin."""
+    def __init__(self):
+        super().__init__("Fusion")
+
+    def drawPrimitive(self, element, option, painter, widget=None):
+        pe = QStyle.PrimitiveElement
+        arrows = {pe.PE_IndicatorArrowDown, pe.PE_IndicatorArrowUp,
+                  pe.PE_IndicatorSpinDown, pe.PE_IndicatorSpinUp}
+        if element != pe.PE_IndicatorCheckBox and element not in arrows:
+            return super().drawPrimitive(element, option, painter, widget)
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        enabled = bool(option.state & QStyle.StateFlag.State_Enabled)
+        rect = QRectF(option.rect)
+        if element == pe.PE_IndicatorCheckBox:
+            checked = bool(option.state & QStyle.StateFlag.State_On)
+            painter.setPen(QPen(QColor("#167c67" if checked and enabled else "#b9c9bf"), 1.2))
+            painter.setBrush(QColor("#167c67" if checked and enabled else "#fafcf9"))
+            painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+            if checked:
+                painter.setPen(QPen(QColor("#ffffff" if enabled else "#a7b6ac"), 1.7,
+                                    Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                path = QPainterPath(QPointF(rect.left() + rect.width() * .25, rect.center().y()))
+                path.lineTo(rect.left() + rect.width() * .44, rect.top() + rect.height() * .69)
+                path.lineTo(rect.left() + rect.width() * .76, rect.top() + rect.height() * .33)
+                painter.drawPath(path)
+        else:
+            x, y = rect.center().x(), rect.center().y()
+            direction = -1 if element in {pe.PE_IndicatorArrowUp, pe.PE_IndicatorSpinUp} else 1
+            painter.setPen(QPen(QColor("#617c6f" if enabled else "#b7c4ba"), 1.4,
+                                Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            path = QPainterPath(QPointF(x - 3, y - direction * 1.5))
+            path.lineTo(x, y + direction * 1.5)
+            path.lineTo(x + 3, y - direction * 1.5)
+            painter.drawPath(path)
+        painter.restore()
+
+
 def apply_theme(app):
     # Use a complete light palette so native controls also remain readable when
     # the operating system is in dark mode.
-    app.setStyle("Fusion")
+    app.setStyle(DesktopStyle())
     palette = QPalette()
     for role, color in {
         "Window": "#f6f7f5", "WindowText": "#233d39", "Base": "#ffffff",
@@ -76,7 +121,7 @@ def apply_theme(app):
     for role in (QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText, QPalette.ColorRole.WindowText):
         palette.setColor(QPalette.ColorGroup.Disabled, role, QColor("#9ba69b"))
     app.setPalette(palette)
-    app.setStyleSheet(STYLE)
+    app.setStyleSheet(STYLE.replace("@assets@", (Path(__file__).parent / "assets").as_posix()))
 
 
 def text_label(text, role="", wrap=False):
