@@ -45,6 +45,21 @@ jobs:
         run: python -m mouseshare --smoke-test
       - name: Build installer and verify bundled runtime
         run: python scripts/build.py
+      - name: Verify Windows installer and uninstaller
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installDir = Join-Path $env:RUNNER_TEMP 'MouseShare-Install-Test'
+          $setup = Resolve-Path 'dist/MouseShare-0.1.0-Windows-x64-Setup.exe'
+          $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=`"$installDir`"", '/TASKS=""')
+          $installer = Start-Process $setup -ArgumentList $arguments -Wait -PassThru
+          if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }
+          $app = Join-Path $installDir 'MouseShare.exe'
+          if (!(Test-Path $app)) { throw 'Installed executable missing' }
+          $smoke = Start-Process $app -ArgumentList '--smoke-test' -Wait -PassThru
+          if ($smoke.ExitCode -ne 0) { throw "Installed app failed: $($smoke.ExitCode)" }
+          $uninstall = Start-Process (Join-Path $installDir 'unins000.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller failed: $($uninstall.ExitCode)" }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: MouseShare-${{ matrix.artifact }}
