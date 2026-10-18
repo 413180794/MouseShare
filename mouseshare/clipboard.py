@@ -116,6 +116,8 @@ class ClipboardSync(QObject):
         self.generation = 0
         self.pending_remote = self.pending_session = None
         self.last_sequence = None
+        self.files_handler = None
+        self.on_content = lambda paths, sequence: None
         if hasattr(self.clipboard, 'dataChanged'):
             self.clipboard.dataChanged.connect(self.changed)
         self.timer = QTimer(self)
@@ -168,10 +170,13 @@ class ClipboardSync(QObject):
             if fingerprint == self.last and sequence is None:
                 return
             self.last = fingerprint
-            self.generation += 1
+            self.on_content(paths, self.sequence())
             if paths:
                 if self.settings.get('clipboard_files', True) and self.service.enabled('files'):
-                    self.service.send_files(paths, clipboard=True)
+                    if self.files_handler:
+                        self.files_handler(paths)
+                    else:
+                        self.service.send_files(paths, clipboard=True)
             elif payload:
                 self.service.send_clipboard(payload)
         except (ValueError, OSError) as exc:
@@ -189,13 +194,16 @@ class ClipboardSync(QObject):
             payload, paths = encode_clipboard(self.clipboard.mimeData(), self.settings.get('clipboard_images', True),
                                                include_remote=True)
             if paths and self.settings.get('clipboard_files', True):
-                self.service.send_files(paths, clipboard=True)
+                if self.files_handler:
+                    self.files_handler(paths)
+                else:
+                    self.service.send_files(paths, clipboard=True)
             elif payload:
                 self.service.send_clipboard(payload)
             else:
                 self.status('当前剪贴板没有可同步内容')
                 return
-            self.status('已提交当前剪贴板，文件需要对方确认接收')
+            self.status('已共享当前剪贴板；文件可在目标电脑按共享粘贴键接收')
         except (ValueError, OSError) as exc:
             self.status(str(exc))
 

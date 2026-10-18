@@ -8,8 +8,9 @@ ALT = {226, 230}
 
 
 class BaseBackend:
-    shortcuts = {41: "panic", 69: "game"}
+    shortcuts = {41: "panic", 69: "game", 6: "share_copy", 25: "share_paste"}
     shortcut_modifiers = (CTRL, ALT)
+    copy_modifier = CTRL
     def __init__(self, emit):
         self.emit = emit
         self.captured = False
@@ -22,6 +23,9 @@ class BaseBackend:
         self.inject_lock = threading.RLock()
         self.hotkey_keys = set()
         self.last_local = time.monotonic()
+        self.native_file_paste_ready = False
+        self.sharing_shortcuts_enabled = False
+        self.cursor_is_hidden = False
 
     def physical(self, event):
         self.last_local = time.monotonic()
@@ -35,10 +39,17 @@ class BaseBackend:
                 if not down:
                     self.hotkey_keys.discard(key)
                 return True
-            if down and all(self.keys & group for group in self.shortcut_modifiers) and key in self.shortcuts:
+            action = self.shortcuts.get(key) if all(self.keys & group for group in self.shortcut_modifiers) else None
+            if action in {'share_copy', 'share_paste'} and (not self.sharing_shortcuts_enabled or not self.keys & {225, 229}):
+                action = None
+            if (down and key == 25 and self.native_file_paste_ready and self.keys & self.copy_modifier
+                    and not self.keys & (ALT | {225, 229})):
+                action = 'share_paste'
+            if down and action:
                 self.hotkey_keys.add(key)
-                self.capture(False)
-                self.emit({"type": "command", "action": self.shortcuts[key]})
+                if action in {'panic', 'game'}:
+                    self.capture(False)
+                self.emit({"type": "command", "action": action})
                 return True
         elif event["type"] == "button":
             if event["down"]:
@@ -53,6 +64,25 @@ class BaseBackend:
 
     def capture(self, enabled):
         self.captured = enabled
+
+    def cursor_hidden(self, hidden):
+        self.cursor_is_hidden = bool(hidden)
+
+    def focus_token(self):
+        return None
+
+    def clipboard_shortcut(self, action):
+        self.release_all()
+        for modifier in range(224, 232):
+            self.key(modifier, False)
+        modifier = min(self.copy_modifier)
+        key = 6 if action == 'copy' else 25
+        try:
+            self.key(modifier, True)
+            self.key(key, True)
+            self.key(key, False)
+        finally:
+            self.key(modifier, False)
 
     def ready(self):
         return self.running and not self.error

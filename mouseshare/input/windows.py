@@ -5,6 +5,7 @@ from ctypes import wintypes as W
 
 from .base import MARKER, BaseBackend
 from .keymap import HID_TO_WIN, WIN_SCANS
+from .windows_cursor import WindowsCursorShield
 
 U = C.WinDLL("user32", use_last_error=True)
 K = C.WinDLL("kernel32", use_last_error=True)
@@ -132,6 +133,19 @@ class WindowsBackend(BaseBackend):
         self.thread_id = 0
         self.started = threading.Event()
         self.mouse_hook = self.key_hook = None
+        self._cursor_shield = WindowsCursorShield()
+
+    def cursor_hidden(self, hidden):
+        self._cursor_shield.set_enabled(hidden)
+        self.cursor_is_hidden = bool(hidden)
+
+    def focus_token(self):
+        hwnd = U.GetForegroundWindow()
+        if not hwnd:
+            return None
+        pid = W.DWORD()
+        U.GetWindowThreadProcessId(hwnd, C.byref(pid))
+        return int(hwnd), pid.value
 
     def bounds(self):
         return (0, 0, U.GetSystemMetrics(0), U.GetSystemMetrics(1))
@@ -190,10 +204,15 @@ class WindowsBackend(BaseBackend):
                 U.UnregisterClassW(class_name, module)
             self.running = False
             self.captured = False
+            self._cursor_shield.set_enabled(False)
             self.started.set()
 
     def capture(self, enabled):
-        self.captured = enabled
+        if enabled:
+            self._cursor_shield.set_enabled(True)
+        self.captured = bool(enabled)
+        if not enabled:
+            self._cursor_shield.set_enabled(False)
         self.raw_absolute.clear()
         self.last = None
 

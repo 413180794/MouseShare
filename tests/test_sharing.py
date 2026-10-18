@@ -197,3 +197,45 @@ def test_manifest_unicode_alias_and_preparation_cancel(tmp_path):
         raise InterruptedError('cancelled')
     with pytest.raises(InterruptedError):
         manifest([source], cancelled)
+
+
+def test_only_locally_requested_nonce_auto_accepts_and_unsolicited_nonce_is_rejected(pair, tmp_path):
+    (a, send, ae, _), (b, receive, be, _) = pair
+    receive.settings.set(auto_receive_files=False)
+    source = tmp_path / 'paste.txt'
+    source.write_text('requested file')
+    request, offer = 'a'*32, 'b'*32
+    claimed = []
+    def authorize(peer, offered, requested):
+        valid = peer == a.identity.id and offered == offer and requested == request and not claimed
+        if valid:
+            claimed.append(requested)
+        return valid
+    receive.authorize_request = authorize
+    job = send.send_files([source], peer_id=b.identity.id, request=request, offer=offer, clipboard=True)
+    wait_for(lambda: send.jobs[job].status in {'complete', 'error'})
+    assert send.jobs[job].status == 'complete', send.jobs[job].detail
+    assert receive.jobs[job].request == request and receive.jobs[job].peer_id == a.identity.id
+    replay = send.send_files([source], peer_id=b.identity.id, request=request, offer=offer, clipboard=True)
+    wait_for(lambda: send.jobs[replay].status in {'rejected', 'error'})
+    assert replay not in receive.jobs
+    assert a.session.connected and b.session.connected
+
+
+def test_bulk_transfer_uses_requested_peer_without_changing_selected_peer(pair, tmp_path):
+    (a, send, ae, _), (b, receive, be, _) = pair
+    c, other, ce, _ = node(tmp_path / 'c')
+    try:
+        a.connect('127.0.0.1', c.port, c.identity.id)
+        wait_for(lambda: a.peer_session(c.identity.id) and a.peer_session(c.identity.id).connected)
+        a.select(b.identity.id)
+        source = tmp_path / 'specific.txt'
+        source.write_bytes(b'only C')
+        job = send.send_files([source], peer_id=c.identity.id)
+        wait_for(lambda: send.jobs[job].status in {'complete', 'error'})
+        assert send.jobs[job].status == 'complete', send.jobs[job].detail
+        assert job in other.jobs and job not in receive.jobs
+        assert a.session.peer_id == b.identity.id
+    finally:
+        other.stop()
+        c.stop()

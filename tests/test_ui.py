@@ -185,3 +185,27 @@ def test_progress_updates_keep_cancel_target_and_fit_minimum_window(window, app)
         assert row[4].itemAt(0).widget() is cancel
     assert panel.width() <= window.stack.width()
     assert panel.files_enabled.height() >= panel.files_enabled.minimumSizeHint().height()
+
+
+def test_drag_layout_snaps_rejects_overlap_and_keeps_unsaved_remote_draft(window, app):
+    from PySide6.QtCore import QPointF
+    from mouseshare.topology import Rect
+    editor = window.layout_editor
+    local, remote = window.identity.id, 'a'*64
+    editor.nodes = {local: Rect(0, 0, 320, 180).data(), remote: Rect(320, 0, 320, 180).data()}
+    editor.rebuild()
+    item = editor.items[remote]
+    item.setPos(327, 65)
+    editor.finish_drag(item, QPointF(320, 0))
+    assert editor.nodes[remote]['x'] == 320 and editor.nodes[remote]['y'] == 65
+    item.setPos(100, 0)
+    editor.finish_drag(item, QPointF(320, 65))
+    assert item.pos() == QPointF(320, 65) and editor.nodes[remote]['x'] == 320
+    editor.save_layout()
+    queued = window.engine.events[-1]
+    assert queued['action'] == 'layout' and queued['layout']['nodes'][remote]['y'] == 65
+    editor.applied(dict(queued['layout'], author=remote, revision=8))
+    assert editor.dirty and '草稿保留' in editor.feedback.text()
+    editor.applied(queued['layout'])
+    assert not editor.dirty
+    assert window.nav_group.button(4).text() == '屏幕布局'

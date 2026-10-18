@@ -13,6 +13,7 @@ from .mac_cursor import CursorShield
 
 
 class MacBackend(BaseBackend):
+    copy_modifier = {227, 231}
     def __init__(self, emit):
         super().__init__(emit)
         self.tap = None
@@ -23,6 +24,21 @@ class MacBackend(BaseBackend):
         self._anchor = None
         self._cursor_shield = CursorShield()
         self.captured_moves = 0
+
+    def cursor_hidden(self, hidden):
+        self._cursor_shield.set_enabled(hidden)
+        self.cursor_is_hidden = bool(hidden)
+
+    def focus_token(self):
+        import AppKit
+        app = AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
+        if not app:
+            return None
+        pid = app.processIdentifier()
+        windows = Q.CGWindowListCopyWindowInfo(Q.kCGWindowListOptionOnScreenOnly, Q.kCGNullWindowID) or []
+        window = next((w.get(Q.kCGWindowNumber) for w in windows if w.get(Q.kCGWindowOwnerPID) == pid
+                       and w.get(Q.kCGWindowLayer) == 0), None)
+        return (pid, window) if window is not None else None
 
     def capture(self, enabled):
         # Consuming session events alone does not stop the hardware cursor.

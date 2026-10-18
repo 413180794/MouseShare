@@ -249,3 +249,55 @@ app.exec()
     finally:
         owner.terminate()
         owner.communicate(timeout=3)
+
+
+@native
+def test_native_file_paste_grab_suppresses_original_and_injected_paste_reaches_focus():
+    api = X11()
+    x = api.x
+    x.XCreateSimpleWindow.argtypes = [C.c_void_p, C.c_ulong, C.c_int, C.c_int, C.c_uint, C.c_uint,
+                                      C.c_uint, C.c_ulong, C.c_ulong]
+    x.XCreateSimpleWindow.restype = C.c_ulong
+    x.XSelectInput.argtypes = [C.c_void_p, C.c_ulong, C.c_long]
+    x.XSetInputFocus.argtypes = [C.c_void_p, C.c_ulong, C.c_int, C.c_ulong]
+    display = x.XOpenDisplay(None)
+    root = x.XDefaultRootWindow(display)
+    window = x.XCreateSimpleWindow(display, root, 20, 20, 100, 100, 0, 0, 0)
+    x.XSelectInput(display, window, 1 | 2)
+    x.XMapWindow(display, window)
+    x.XSetInputFocus(display, window, 1, 0)
+    x.XSync(display, False)
+    backend = LinuxBackend(lambda event: True)
+    backend.start()
+    try:
+        backend.sharing_shortcuts_enabled = backend.native_file_paste_ready = True
+        wait_for(lambda: len(backend.shortcut_grabs) == 12)
+        assert not backend.shortcut_grab_error
+        # XTEST on a different connection stands in for an actual keyboard.
+        api.xt.XTestFakeKeyEvent(display, HID_TO_X11[224], True, 0)
+        api.xt.XTestFakeKeyEvent(display, HID_TO_X11[25], True, 0)
+        api.xt.XTestFakeKeyEvent(display, HID_TO_X11[25], False, 0)
+        api.xt.XTestFakeKeyEvent(display, HID_TO_X11[224], False, 0)
+        x.XSync(display, False)
+        codes = []
+        while x.XPending(display):
+            event = Event()
+            x.XNextEvent(display, C.byref(event))
+            codes.append(event.cookie.type)
+        assert codes.count(2) == 1  # Only Ctrl-down reached the original app.
+        backend.clipboard_shortcut('paste')
+        x.XSync(display, False)
+        codes = []
+        while x.XPending(display):
+            event = Event()
+            x.XNextEvent(display, C.byref(event))
+            codes.append(event.cookie.type)
+        assert codes.count(2) == 2  # Injected Ctrl and V reach the focused app.
+        backend.cursor_hidden(True)
+        backend.cursor_hidden(True)
+        backend.cursor_hidden(False)
+        assert not backend.cursor_is_hidden
+    finally:
+        backend.stop()
+        x.XDestroyWindow(display, window)
+        x.XCloseDisplay(display)

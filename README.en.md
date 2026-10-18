@@ -6,7 +6,7 @@ Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux 
 
 [Download](https://github.com/413180794/MouseShare/releases) · [Builds](https://github.com/413180794/MouseShare/actions) · [Acceptance checklist](docs/ACCEPTANCE.md)
 
-**v0.4.0 is a preview.** Automated tests cover authenticated TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available. The application UI is currently primarily Simplified Chinese.
+**v0.5.0 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available. The application UI is currently primarily Simplified Chinese.
 
 ![Connection UI with isolated sample devices](docs/screenshot.png)
 
@@ -14,12 +14,12 @@ Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux 
 
 | Platform | Package | Installation |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.4.0-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
-| Windows portable | `MouseShare-0.4.0-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
-| Apple Silicon, macOS 13+ | `MouseShare-0.4.0-macOS-arm64.dmg` | Drag the app into Applications |
-| Intel, macOS 13+ | `MouseShare-0.4.0-macOS-x86_64.dmg` | Drag the app into Applications |
-| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.4.0-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
-| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.4.0-Linux-arm64.deb` or `.tar.gz` | Same as above |
+| Windows 10/11 x64 | `MouseShare-0.5.0-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
+| Windows portable | `MouseShare-0.5.0-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
+| Apple Silicon, macOS 13+ | `MouseShare-0.5.0-macOS-arm64.dmg` | Drag the app into Applications |
+| Intel, macOS 13+ | `MouseShare-0.5.0-macOS-x86_64.dmg` | Drag the app into Applications |
+| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.5.0-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
+| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.5.0-Linux-arm64.deb` or `.tar.gz` | Same as above |
 
 Packages include Python and Qt. Linux still requires X11/Qt system libraries; the DEB declares these dependencies. The portable archive includes a user-level `install.sh` that adds a menu entry and preserves older version directories. See [Linux instructions](docs/INSTALL-Linux.txt).
 
@@ -28,7 +28,7 @@ Releases currently have no commercial code signing or Apple notarization. Verify
 For portable Linux builds on minimal desktops, install the following Qt/X11 runtime libraries. The DEB resolves its complete dependency list automatically:
 
 ```bash
-sudo apt install libx11-6 libxi6 libxtst6 libxrandr2 libxss1 \
+sudo apt install libx11-6 libxi6 libxtst6 libxfixes3 libxrandr2 libxss1 \
   libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
   libxcb-keysyms1 libxcb-shape0 libxcb-render-util0 libxcb-xinerama0 \
   libegl1 libopengl0 libdbus-1-3
@@ -57,8 +57,8 @@ On **Wayland**, this release offers file transfer and foreground clipboard butto
 1. Connect both computers to the same trusted LAN and start MouseShare.
 2. On **设备连接** (Devices), select the nearby computer and choose Pair and Connect. Discovery uses multicast and broadcast.
 3. **Compare the six-digit code on both computers and approve on both.** Only approve connections you intended. The certificate fingerprint is remembered for reconnection.
-4. On **共享设置** (Sharing Settings), choose the other computer's relative position on each machine. For a Mac to the right of a Windows PC, select Right on Windows and Left on Mac, then save.
-5. Move to the configured primary-screen edge and wait 180 ms by default. Keyboard, clicks, scrolling and dragging follow the pointer. Move outward through the entry edge to return.
+4. Open **屏幕布局** (Screen Layout). Drag computer rectangles to match your desk, join the desired edges, then save. Offsets and relative screen sizes are editable. Layouts synchronize to paired v0.5.0+ participants; the original two-computer direction setting is available when layout mode is disabled.
+5. Move to an overlapping shared edge and wait 180 ms by default. Input can continue A→B→C and back through the arrangement. Gaps, uncovered edges and offline neighbors stop the pointer. Up to eight computers are supported; independently pair every two computers that need direct control or file transfers.
 
 If discovery is unavailable, expand Connect by IP and enter the other computer's IPv4 address. Allow **UDP 24871 and TCP 24872** on your trusted LAN. The Windows installer offers inbound rules restricted to the local subnet on private networks. Guest Wi-Fi isolation, VPNs, different subnets and firewalls can affect discovery.
 
@@ -81,7 +81,7 @@ Physical input on a receiving computer reclaims control. Holding a key or mouse 
 
 ## Clipboard and files
 
-New text, HTML and images copied after connection sync automatically on Windows/macOS/X11. Copying files/folders starts a transfer request. Accept on the receiving computer, then paste locally; the completed record also offers Copy Files and a drag-out button. You can drop files onto the app or an optional screen-edge drop tab.
+New text, HTML and images copied after connection sync automatically on Windows/macOS/X11. Files are fetched when you paste: copy files on the source, then press Ctrl+Alt+Shift+V in the destination window. Ctrl+Alt+Shift+C is a dedicated copy command; macOS uses Control+Option+Shift+C/V. Optional native Ctrl+V/Command+V interception applies only to fresh remote file offers. Automatic paste requires the original focus, input activity and clipboard to remain unchanged; otherwise use the completed transfer record. Explicit sends still offer receive confirmation; the completed record also offers Copy Files and a drag-out button. You can drop files onto the app or an optional screen-edge drop tab.
 
 Transfers show progress, speed and estimated time, support cancellation/re-send, and save batches in separate folders to preserve existing filenames. Each file is verified with SHA-256. The default receive directory is `Downloads/MouseShare`; it is configurable. The latest 20 completed/failed records store metadata locally. Clearing records keeps received files.
 
@@ -90,7 +90,7 @@ Transfers show progress, speed and estimated time, support cancellation/re-send,
 - Clipboard content from before connection stays local; copy again to send. Received content is marked to avoid loops. Marked private password-manager formats are skipped; ordinary text follows your sharing settings.
 - Game mode, pause, lock and disconnect stop sharing. Incomplete file transfers are cleaned up. Re-send starts from the beginning.
 - Native continuous file dragging across screen edges remains future work. The current flow uses a drop tab, transfer, then local drag-out.
-- Content sharing is compatible with v0.3.0+; Linux requires v0.4.0+. Wayland uses explicit foreground clipboard actions, and received files are copied through the record's Copy Files button.
+- Content sharing is compatible with v0.3.0+; Linux requires v0.4.0+; multi-computer layouts and on-demand file paste require v0.5.0+ on participating devices. Wayland uses explicit foreground clipboard actions, and received files are copied through the record's Copy Files button.
 
 ![File sharing UI with sample transfer data](docs/sharing.png)
 
@@ -100,7 +100,9 @@ Closing the window keeps the app in the tray/menu bar where available. Login sta
 
 Physical keyboard positions use USB HID IDs; the receiver's layout and IME produce text. The Windows key maps to macOS Command, Ctrl to Control. Enable Swap Ctrl and Command/Win on the receiver to change this behavior. On X11, the standard evdev/XKB keycode layout is used; relative mice and standard wheels are covered. Tablets, custom keycode maps and specific gaming drivers need acceptance.
 
-Each instance currently connects to one peer and uses its primary monitor as the sharing boundary. Multi-monitor topology, continuous native cross-computer file dragging, resumable transfers, video streaming and Windows ARM packages remain future work. Login/lock screens, UAC secure desktops, macOS Secure Input and elevated target applications can restrict injection. See [Microsoft's SendInput restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput).
+Each instance connects to up to seven peers and uses its primary monitor as the sharing boundary. The source cursor hides during forwarding and restores on return or failure. The receiver has an optional colored pointer ring. Independent topology for multiple monitors on one computer, continuous native cross-computer file dragging, resumable transfers, video streaming and Windows ARM packages remain future work. Login/lock screens, UAC secure desktops, macOS Secure Input and elevated target applications can restrict injection. See [Microsoft's SendInput restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput).
+
+![Draggable layout with sample devices](docs/layout.png)
 
 ## Local data and security
 

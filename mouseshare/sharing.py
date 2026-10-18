@@ -113,6 +113,9 @@ class Transfer:
     detail: str = ""
     paths: list = field(default_factory=list)
     clipboard: bool = False
+    peer_id: str = ''
+    request: str = ''
+    offer: str = ''
     cancelled: threading.Event = field(default_factory=threading.Event)
     decision: threading.Event = field(default_factory=threading.Event)
     approved: bool = False
@@ -137,6 +140,7 @@ class SharingService:
         self.closed = False
         self.clip_pending = None
         self.clip_thread = None
+        self.authorize_request = lambda peer, offer, request: False
         network.on_data = self.receive
 
     def enabled(self, kind):
@@ -152,7 +156,8 @@ class SharingService:
             job.detail = detail
         self.emit(dict(type='transfer', job=job.id, direction=job.direction, title=job.title,
                        status=job.status, detail=job.detail, total=job.total, done=job.done,
-                       paths=list(job.paths), clipboard=job.clipboard,
+                       paths=list(job.paths), clipboard=job.clipboard, peer=job.peer_id,
+                       request=job.request, offer=job.offer,
                        speed=int(job.done / max(0.1, time.monotonic() - job.started)) if job.started else 0))
 
     def register(self, job):
@@ -182,13 +187,16 @@ class SharingService:
         if job.cancelled.is_set() or not self.enabled('files'):
             raise InterruptedError("传输已取消或共享已暂停")
 
-    def send_files(self, paths, clipboard=False):
-        session = self.network.session
+    def send_files(self, paths, clipboard=False, *, peer_id=None, request='', offer=''):
+        session = self.network.peer_session(peer_id) if peer_id else self.network.session
+        if not session or not session.connected:
+            raise ValueError('目标电脑已断开连接')
         if session and session.connected and 'sharing-v1' not in getattr(session, 'peer_features', []):
             raise ValueError("文件共享需要两端均升级至 v0.3.0 或更新版本")
         if not self.enabled('files'):
             raise ValueError("文件共享已关闭，或当前处于暂停／游戏模式")
-        job = Transfer('send', clipboard=clipboard, paths=[str(Path(p).absolute()) for p in paths])
+        job = Transfer('send', clipboard=clipboard, paths=[str(Path(p).absolute()) for p in paths],
+                       peer_id=getattr(session, 'peer_id', ''), request=request, offer=offer)
         self.register(job)
         threading.Thread(target=self._send_files, args=(job, list(paths)), daemon=True, name='file-send').start()
         return job.id
@@ -204,8 +212,10 @@ class SharingService:
             def work(channel):
                 channel.kind = 'files'
                 sock = job.sock = channel.sock
-                sock.sendall(frame(dict(type='files', id=job.id, count=len(entries), total=job.total,
-                                        clipboard=job.clipboard)))
+                header = dict(type='files', id=job.id, count=len(entries), total=job.total, clipboard=job.clipboard)
+                if job.request:
+                    header.update(request=job.request, offer=job.offer)
+                sock.sendall(frame(header))
                 for entry in entries:
                     self.check(job)
                     sock.sendall(frame(dict(type='entry', **entry)))
@@ -247,7 +257,7 @@ class SharingService:
                 if recv_frame(sock).get('type') != 'complete':
                     raise OSError("对方未确认传输完成")
                 self.update(job, 'complete', '对方已接收并校验')
-            self.network.data_connection(work)
+            self.network.data_connection(work, job.peer_id) if job.peer_id else self.network.data_connection(work)
         except Exception as exc:
             if job.status != 'rejected':
                 self.update(job, 'cancelled' if job.cancelled.is_set() or isinstance(exc, InterruptedError) else 'error',
@@ -259,7 +269,7 @@ class SharingService:
         if len(payload) > MAX_CLIPBOARD or not self.enabled('clipboard'):
             return
         with self.lock:
-            self.clip_pending = payload
+            self.clip_pending = (payload, self.network.session)
             if self.clip_thread and self.clip_thread.is_alive():
                 return
             self.clip_thread = threading.Thread(target=self._clipboard_worker, daemon=True, name='clipboard-send')
@@ -268,10 +278,13 @@ class SharingService:
     def _clipboard_worker(self):
         while True:
             with self.lock:
-                payload, self.clip_pending = self.clip_pending, None
-                if payload is None:
+                pending, self.clip_pending = self.clip_pending, None
+                if pending is None:
                     self.clip_thread = None
                     return
+                payload, target = pending
+            if target is not self.network.session or not target or not target.connected:
+                continue
             if not self.enabled('clipboard'):
                 continue
             try:
@@ -283,12 +296,13 @@ class SharingService:
                         sock.sendall(payload)
                         if recv_frame(sock).get('type') == 'complete':
                             self.emit(dict(type='clipboard_status', text='剪贴板已同步'))
-                self.network.data_connection(work)
+                key = getattr(target, 'peer_id', '')
+                self.network.data_connection(work, key) if key else self.network.data_connection(work)
             except (OSError, ValueError):
                 self.emit(dict(type='clipboard_status', text='剪贴板同步暂不可用'))
 
     def receive(self, channel):
-        control = self.network.session
+        control = getattr(channel, 'control_session', None) or self.network.session
         header = recv_frame(channel.sock)
         channel.kind = header.get('type')
         if header.get('type') == 'clipboard':
@@ -334,10 +348,17 @@ class SharingService:
             validate_manifest(entries, header.get('total'))
             names = [e['path'] for e in entries if '/' not in e['path']]
             job = Transfer('receive', title='、'.join(names)[:160], id=header['id'], total=header['total'],
-                           clipboard=header['clipboard'], sock=sock)
+                           clipboard=header['clipboard'], sock=sock, peer_id=getattr(channel, 'peer_id', ''),
+                           request=header.get('request', ''), offer=header.get('offer', ''))
+            requested = bool(job.request)
+            if requested and (not re.fullmatch('[0-9a-f]{32}', str(job.request))
+                              or not re.fullmatch('[0-9a-f]{32}', str(job.offer))
+                              or not self.authorize_request(job.peer_id, job.offer, job.request)):
+                sock.sendall(frame(dict(type='accept', accepted=False)))
+                return
             self.register(job)
             self.update(job, 'offered', f'{channel.peer_name} 请求发送 {len(entries)} 项')
-            if self.settings.get('auto_receive_files', False):
+            if requested or self.settings.get('auto_receive_files', False):
                 job.approved = True
                 job.decision.set()
             deadline = time.monotonic() + 110

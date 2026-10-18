@@ -1,6 +1,7 @@
 """Versioned, bounded JSON frames; only explicit input messages are accepted."""
 import json
 import math
+import re
 import struct
 
 VERSION = 1
@@ -58,7 +59,37 @@ def number(value, lo, hi):
 
 
 def valid_input(message):
+    def token(key, length=32):
+        return isinstance(message.get(key), str) and re.fullmatch('[0-9a-f]{'+str(length)+'}', message[key]) is not None
+    if 'flow' in message and not token('flow'):
+        return False
     kind = message.get("type")
+    if kind == 'layout':
+        from .topology import validate_layout
+        try:
+            validate_layout(message.get('layout'))
+            return True
+        except (ValueError, TypeError):
+            return False
+    if kind == 'route':
+        return token('flow') and token('target', 64) and message.get('edge') in SIDES and number(message.get('position'), 0, 1)
+    if kind == 'standby':
+        return token('flow')
+    if kind == 'paste_ready':
+        return type(message.get('ready')) is bool
+    if kind == 'clipboard_action':
+        return token('flow') and message.get('action') in {'copy', 'paste'}
+    if kind == 'file_offer':
+        names = message.get('names')
+        return (token('offer') and type(message.get('count')) is int and 1 <= message['count'] <= 4096
+                and isinstance(names, list) and 1 <= len(names) <= 12
+                and all(isinstance(n, str) and 1 <= len(n) <= 255 and not any(ord(c)<32 for c in n) for n in names))
+    if kind == 'file_clear':
+        return token('offer')
+    if kind == 'file_request':
+        return token('offer') and token('request')
+    if kind == 'file_error':
+        return token('request') and isinstance(message.get('message'), str) and len(message['message']) <= 160
     if kind == "move":
         return number(message.get("dx"), -8192, 8192) and number(message.get("dy"), -8192, 8192)
     if kind == "key":

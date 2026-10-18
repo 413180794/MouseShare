@@ -30,6 +30,9 @@ from .sharing import SharingService
 from .clipboard import ClipboardSync
 from .share_ui import EdgePortal, SharePanel
 from .games import GAMES, add_defaults
+from .layout_ui import LayoutEditor
+from .file_clipboard import FileClipboard
+from .pointer_ui import RemotePointer
 
 OS_NAMES = {'Darwin': 'macOS', 'Windows': 'Windows', 'Linux': 'Linux'}
 
@@ -46,6 +49,7 @@ class Bridge(QObject):
     status = Signal(dict)
     error = Signal(str)
     sharing = Signal(dict)
+    auxiliary = Signal(dict)
 
 
 
@@ -61,13 +65,16 @@ class MainWindow(QMainWindow):
         self.bridge.pair.connect(self.pair_dialog)
         self.bridge.status.connect(self.show_status)
         self.bridge.error.connect(self.notice)
-        self.engine = Engine(settings, self.bridge.status.emit)
+        self.engine = Engine(settings, self.bridge.status.emit, local_id=identity.id,
+                             auxiliary=self.bridge.auxiliary.emit)
+        self.bridge.auxiliary.connect(self.engine_event)
         self.backend = create_backend(self.engine.enqueue)
         self.engine.backend = self.backend
         self.network = Network(identity, settings, self.bridge.pair.emit,
                                lambda s: self.engine.enqueue({"type": "connected", "session": s}),
                                lambda s, m: self.engine.enqueue({"type": "network", "session": s, "message": m}),
                                self.disconnected, self.bridge.error.emit)
+        self.network.screen_provider = lambda: dict(w=self.backend.bounds()[2], h=self.backend.bounds()[3])
         self.discovery = Discovery(identity, settings, self.bridge.peer.emit, self.bridge.error.emit)
         self.sharing = SharingService(self.network, settings, self.sharing_allowed, self.bridge.sharing.emit)
         self.bridge.sharing.connect(self.sharing_event)
@@ -80,7 +87,10 @@ class MainWindow(QMainWindow):
         self.build_tray()
         self.clipboard_sync = None if demo else ClipboardSync(
             self.sharing, settings, self.share_panel.status.setText, self)
+        self.file_clipboard = None if demo else FileClipboard(self)
+        self.remote_pointer = RemotePointer(self)
         self.edge_portal = EdgePortal(self)
+        self.refresh_layout_devices()
         self.linux_session = None
         if sys.platform.startswith('linux') and not demo:
             from .linux_session import LinuxSession
@@ -129,7 +139,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stack.setObjectName("pages")
         for index, (label, icon) in enumerate([("设备连接", "devices"), ("共享设置", "settings"),
-                                                ("游戏模式", "game"), ("文件与剪贴板", "devices")]):
+                                                ("游戏模式", "game"), ("文件与剪贴板", "devices"), ("屏幕布局", "devices")]):
             button = QPushButton(label)
             button.setObjectName("nav")
             button.setIcon(line_icon(icon, INK_2, checked=ACCENT))
@@ -156,7 +166,7 @@ class MainWindow(QMainWindow):
         footer.setContentsMargins(6, 0, 0, 0)
         footer.setSpacing(4)
         footer.addWidget(text_label(f"VERSION {__version__}", "eyebrow"))
-        footer.addWidget(text_label("为你的两台电脑搭一座桥。", "hint", True))
+        footer.addWidget(text_label("让桌面上的电脑连在一起。", "hint", True))
         rail.addLayout(footer)
         outer.addWidget(sidebar)
         outer.addWidget(self.stack, 1)
@@ -167,7 +177,36 @@ class MainWindow(QMainWindow):
         self.share_panel = SharePanel(self)
         layout.addWidget(self.share_panel)
         layout.addStretch()
+        layout, _ = self.make_page("屏幕布局", "拖动屏幕，排列你的整张桌面。最多连接 8 台电脑。")
+        self.layout_editor = LayoutEditor(self.settings, self.identity.id,
+                                          lambda value: self.engine.command("layout", layout=value))
+        layout.addWidget(self.layout_editor)
+        layout.addStretch()
         self.stack.currentChanged.connect(lambda i: self.nav_group.button(i).setChecked(True))
+
+    def engine_event(self, event):
+        if self.closed:
+            return
+        if event['type'] == 'layout_applied':
+            self.layout_editor.applied(event['layout'])
+        if getattr(self, 'file_clipboard', None):
+            self.file_clipboard.handle_event(event)
+        if event['type'] == 'peer_connected':
+            self.refresh_peers()
+
+    def refresh_layout_devices(self):
+        if not hasattr(self, 'layout_editor'):
+            return
+        bounds = self.backend.bounds()
+        metadata = {self.identity.id: dict(name=self.settings.get('name'), connected=True,
+                                          screen=dict(w=bounds[2], h=bounds[3]))}
+        for key, peer in self.settings.get('peers').items():
+            session = self.network.peer_session(key)
+            metadata[key] = dict(name=peer.get('name', key[:8]), connected=bool(session),
+                                 screen=getattr(session, 'peer_screen', {}))
+        self.layout_editor.update_devices(metadata)
+        if hasattr(self, 'share_panel'):
+            self.share_panel.update_recipients()
 
     def sharing_allowed(self, kind):
         session = self.network.session
@@ -179,6 +218,8 @@ class MainWindow(QMainWindow):
             return
         if event['type'] == 'transfer':
             self.share_panel.transfer(event)
+            if getattr(self, 'file_clipboard', None):
+                self.file_clipboard.transfer(event)
         elif event['type'] == 'clipboard' and self.clipboard_sync:
             if event.get('control') is self.network.session:
                 self.clipboard_sync.apply(event['payload'])
@@ -219,7 +260,7 @@ class MainWindow(QMainWindow):
         return layout, heading
 
     def build_home(self):
-        layout, heading = self.make_page("设备连接", "一套键鼠，在两台电脑间自由切换。")
+        layout, heading = self.make_page("设备连接", "一套键鼠，在多台电脑间自由切换。")
         self.status_badge = StatusBadge("正在启动")
         heading.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignTop)
         box, body = card()
@@ -322,14 +363,18 @@ class MainWindow(QMainWindow):
 
     def build_settings(self):
         layout, _ = self.make_page("共享设置", "让跨屏方式适合你的桌面摆放和使用习惯。")
-        box, body = card("屏幕位置", "在两台电脑上分别设置对方的位置。")
+        box, body = card("屏幕位置", "在屏幕布局中拖动电脑，可设置错位、多方向与多台设备。")
+        arrange = QPushButton("打开可拖动的屏幕布局")
+        arrange.setObjectName("primary")
+        arrange.clicked.connect(lambda: self.stack.setCurrentIndex(4))
+        body.addWidget(arrange)
         form = QFormLayout()
         form.setSpacing(18)
         self.side = QComboBox()
         for label, value in [("右侧 →", "right"), ("左侧 ←", "left"), ("上方 ↑", "top"), ("下方 ↓", "bottom")]:
             self.side.addItem(label, value)
         self.side.setCurrentIndex(self.side.findData(self.settings.get("side")))
-        form.addRow("另一台电脑在本机的", self.side)
+        form.addRow("简单双机方向（布局关闭时）", self.side)
         row = QHBoxLayout()
         self.dwell = QSpinBox()
         self.dwell.setRange(100, 1500)
@@ -362,6 +407,14 @@ class MainWindow(QMainWindow):
         self.startup = QCheckBox("登录后自动启动")
         self.startup.setChecked(self.settings.get("startup"))
         form.addRow("开机启动", self.startup)
+        self.pointer_highlight = QCheckBox("远端控制时显示彩色光圈")
+        self.pointer_highlight.setChecked(self.settings.get('remote_pointer', True))
+        form.addRow("光标识别", self.pointer_highlight)
+        self.pointer_color = QComboBox()
+        for label, color in [('青绿', '#16a38c'), ('蓝色', '#3978df'), ('紫色', '#945ce6'), ('橙色', '#e48632')]:
+            self.pointer_color.addItem(label, color)
+        self.pointer_color.setCurrentIndex(max(0, self.pointer_color.findData(self.settings.get('pointer_color', '#16a38c'))))
+        form.addRow("光圈颜色", self.pointer_color)
         body.addLayout(form)
         self.device_info = text_label(f"设备指纹  {self.identity.id[:16]}", "hint")
         body.addWidget(self.device_info)
@@ -452,14 +505,15 @@ class MainWindow(QMainWindow):
                     dwell_ms=self.dwell.value(), sensitivity=self.speed.value(),
                     auto_fullscreen=self.fullscreen.isChecked(),
                     game_processes=[s.strip() for s in self.games.text().split(";") if s.strip()],
-                    startup=self.startup.isChecked(), swap_ctrl_meta=self.swap.isChecked())
+                    startup=self.startup.isChecked(), swap_ctrl_meta=self.swap.isChecked(),
+                    remote_pointer=self.pointer_highlight.isChecked(), pointer_color=self.pointer_color.currentData())
 
     def bind_settings_feedback(self):
         self.saved_form = self.form_values()
         self.form_saved_once = False
         for signal in (self.device_name.textChanged, self.side.currentIndexChanged, self.dwell.valueChanged,
                        self.speed.valueChanged, self.fullscreen.toggled, self.games.textChanged,
-                       self.startup.toggled, self.swap.toggled):
+                       self.startup.toggled, self.swap.toggled, self.pointer_highlight.toggled, self.pointer_color.currentIndexChanged):
             signal.connect(self.settings_changed)
         self.settings_changed()
 
@@ -481,9 +535,9 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "connect_button"):
             return
         selected = self.selected_id()
-        session = self.network.session
-        self.connect_button.setEnabled(bool(selected) and not session)
-        self.connect_button.setText("已连接" if session and session.connected else "连接中…" if session else "配对并连接")
+        session = self.network.peer_session(selected) if selected else None
+        self.connect_button.setEnabled(bool(selected))
+        self.connect_button.setText("选择内容共享目标" if session and session.connected else "连接中…" if session else "配对并连接")
         self.forget_button.setEnabled(selected in self.settings.get("peers"))
 
     def update_map(self):
@@ -517,6 +571,8 @@ class MainWindow(QMainWindow):
             hint = "从对方屏幕原路返回即可收回"
         elif state.get("state") == "receiving":
             hint = "操作本机实体键鼠可立即收回"
+        elif self.engine.layout():
+            hint = "按屏幕布局，从相接的边缘跨屏；离线设备处会停止"
         else:
             hint = f"移到{direction}边缘，停留 {self.settings.get('dwell_ms')} ms 即可跨屏"
         self.edge_hint.setText(hint)
@@ -557,6 +613,8 @@ class MainWindow(QMainWindow):
         self.notice_label.setText(text)
 
     def show_status(self, state):
+        if state.get('active_peer'):
+            self.network.select(state['active_peer'])
         previous_state = getattr(self, 'ui_state', {})
         self.ui_state = state
         need_permission = (not state["ready"] and sys.platform == "darwin" and
@@ -585,6 +643,8 @@ class MainWindow(QMainWindow):
             title, detail = "正在控制另一台电脑", f"键鼠输出到 {peer}。从对方屏幕原路返回即可收回。"
         elif state["state"] == "receiving":
             title, detail = "正在接收远端键鼠", f"由 {peer} 控制。操作本机实体键鼠可立即收回。"
+        elif state["state"] == "standby":
+            title, detail = "控制已交接到下一台电脑", "本机光标已隐藏。操作实体键鼠或按收回快捷键可恢复。"
         elif state["connected"]:
             title = "已连接 · 本机控制中"
             detail = f"已连接 {peer}。" + ("把鼠标移到设定边缘并稍作停留即可跨屏。" if state["peer_available"]
@@ -610,6 +670,7 @@ class MainWindow(QMainWindow):
         self.permission_button.setToolTip(state["error"] or "检查辅助功能和输入监控权限")
         self.update_map()
         self.update_actions()
+        self.share_panel.update_recipients()
         self.tray.setToolTip(f"MouseShare · {title}")
         if state.get('game') or state.get('paused') or state.get('system_blocked') or not state['connected']:
             self.sharing.pause()
@@ -633,7 +694,7 @@ class MainWindow(QMainWindow):
             self.peers[peer["id"]] = peer
         # Deterministic dialer prevents simultaneous automatic connection attempts.
         if (peer["id"] in self.settings.get("peers") and self.identity.id < peer["id"]
-                and not self.network.session and not self.demo):
+                and not self.network.peer_session(peer["id"]) and not self.demo):
             self.network.connect(peer["host"], peer["port"], peer["id"])
         self.refresh_peers()
 
@@ -660,8 +721,8 @@ class MainWindow(QMainWindow):
                 self.peer_group.addButton(button)
                 self.peer_list.addWidget(button)
             status, tone = ("已配对", "paired") if peer_id in trusted else ("待配对", "idle")
-            session = self.network.session
-            if session and session.peer_id == peer_id:
+            session = self.network.peer_session(peer_id)
+            if session:
                 status, tone = ("已连接", "active") if session.connected else ("连接中", "warning")
             elif not peer.get("seen"):
                 status, tone = "离线 · 已配对", "idle"
@@ -673,6 +734,7 @@ class MainWindow(QMainWindow):
             button.setToolTip(full_label)
             if peer_id == selected:
                 button.setChecked(True)
+        self.refresh_layout_devices()
         self.empty_label.setVisible(not rows)
         if rows and not self.peer_group.checkedButton():
             next(iter(self.peer_buttons.values())).setChecked(True)
@@ -712,8 +774,10 @@ class MainWindow(QMainWindow):
             self.notice("请先在列表中选择一台电脑。")
             return
         peer = self.peers.get(peer_id) or self.settings.get("peers").get(peer_id)
-        if self.network.session:
-            self.notice("当前已有连接或配对请求。可先取消配对，或等待连接结束。")
+        if self.network.peer_session(peer_id):
+            self.engine.command("select_peer", peer=peer_id)
+            self.network.select(peer_id)
+            self.notice("已选择此电脑作为内容共享目标。屏幕布局决定键鼠切换方向。")
             return
         self.notice("正在连接；首次连接请在两台电脑上核对配对码。")
         if not self.demo:
@@ -734,8 +798,9 @@ class MainWindow(QMainWindow):
         if not peer_id:
             return
         self.settings.forget(peer_id)
-        if self.network.session and self.network.session.peer_id == peer_id:
-            self.network.session.stop()
+        session = self.network.peer_session(peer_id)
+        if session:
+            session.stop()
         self.refresh_peers()
         self.notice("配对已取消。下次连接将重新核对配对码。")
 
@@ -848,6 +913,9 @@ class MainWindow(QMainWindow):
             return
         self.closed = True
         self.timer.stop()
+        if self.file_clipboard:
+            self.file_clipboard.stop()
+        self.remote_pointer.close()
         self.sharing.stop()
         if self.clipboard_sync:
             self.clipboard_sync.stop()

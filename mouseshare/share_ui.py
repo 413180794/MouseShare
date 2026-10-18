@@ -3,9 +3,9 @@ import json
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QUrl, QTimer
+from PySide6.QtCore import Qt, Signal, QUrl, QTimer, QSignalBlocker
 from PySide6.QtGui import QDesktopServices, QDrag
-from PySide6.QtWidgets import (QApplication, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLayout,
+from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLayout,
                                QLineEdit, QProgressBar, QPushButton, QVBoxLayout, QWidget, QSizePolicy)
 
 from .clipboard import files_mime, wayland_session
@@ -103,12 +103,16 @@ class SharePanel(QWidget):
         box, body = card('剪贴板', '在一台电脑复制，在另一台电脑粘贴。')
         self.clipboard_enabled = QCheckBox('开启剪贴板共享（文字与富文本）')
         self.clipboard_images = QCheckBox('同步截图和图片')
-        self.clipboard_files = QCheckBox('复制文件时发起传输，接收后可粘贴')
+        self.clipboard_files = QCheckBox('共享文件剪贴板：粘贴时传输文件')
+        self.native_paste = QCheckBox('支持系统粘贴键：Windows／Linux Ctrl+V，Mac ⌘V')
         for checkbox, key in [(self.clipboard_enabled, 'clipboard_sync'), (self.clipboard_images, 'clipboard_images'),
-                              (self.clipboard_files, 'clipboard_files')]:
+                              (self.clipboard_files, 'clipboard_files'), (self.native_paste, 'native_file_paste')]:
             checkbox.setChecked(window.settings.get(key, True))
             checkbox.toggled.connect(lambda value, k=key: self.preference(k, value))
             body.addWidget(checkbox)
+        body.addWidget(text_label('专用快捷键：Ctrl+Alt+Shift+C 复制，Ctrl+Alt+Shift+V 粘贴。'
+                                 'Mac 对应 Control+Option+Shift+C／V。可在文件管理器中直接操作。'
+                                 '系统粘贴键仅在有新收到的文件信息时接管；文字粘贴保持原有方式。', 'hint', True))
         self.clipboard_images.setEnabled(self.clipboard_enabled.isChecked())
         self.clipboard_files.setEnabled(self.clipboard_enabled.isChecked())
         actions = QHBoxLayout()
@@ -135,6 +139,10 @@ class SharePanel(QWidget):
         self.portal_enabled.setChecked(window.settings.get('edge_drop', False))
         self.portal_enabled.toggled.connect(lambda value: self.preference('edge_drop', value))
         body.addWidget(self.portal_enabled)
+        self.recipient = QComboBox()
+        self.recipient.setAccessibleName('文件发送目标')
+        body.addWidget(text_label('文件发送目标', 'hint'))
+        body.addWidget(self.recipient)
         self.drop = DropZone()
         self.drop.files.connect(self.send)
         body.addWidget(self.drop)
@@ -167,6 +175,17 @@ class SharePanel(QWidget):
                         self.transfer(event, persist=False)
         except (OSError, ValueError, TypeError, KeyError):
             pass
+
+    def update_recipients(self):
+        selected = self.recipient.currentData()
+        blocker = QSignalBlocker(self.recipient)
+        self.recipient.clear()
+        self.recipient.addItem('当前控制／选中的电脑', '')
+        for key, session in list(self.window.network.sessions.items()):
+            if session.connected and 'sharing-v1' in getattr(session, 'peer_features', []):
+                self.recipient.addItem(session.peer_name, key)
+        self.recipient.setCurrentIndex(max(0, self.recipient.findData(selected)))
+        del blocker
 
     def preference(self, key, value):
         self.window.settings.set(**{key: value})
@@ -203,7 +222,7 @@ class SharePanel(QWidget):
             self.status.setText('演示界面：实际传输将在双机连接后启用')
             return
         try:
-            self.service.send_files(paths, clipboard)
+            self.service.send_files(paths, clipboard, peer_id=self.recipient.currentData() or None)
         except (OSError, ValueError) as exc:
             self.status.setText(str(exc))
 
@@ -279,6 +298,8 @@ class SharePanel(QWidget):
             button('复制文件', lambda: self.window.clipboard_sync.copy_files(paths))
             buttons.addWidget(DragFiles(paths))
             if (persist and not wayland_session() and previous and previous['status'] != 'complete' and event.get('clipboard')
+                    and not event.get('request')
+                    and event.get('peer', '') == getattr(self.window.network.session, 'peer_id', '')
                     and self.window.sharing.enabled('clipboard') and self.window.settings.get('clipboard_files', True)
                     and self.clip_generations.get(key) == self.window.clipboard_sync.sequence()):
                 self.window.clipboard_sync.copy_files(paths)

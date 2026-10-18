@@ -3,7 +3,7 @@ import platform
 import shutil
 import subprocess
 
-DEPENDENCIES = ('libc6 (>= 2.35), libstdc++6, libgcc-s1, libx11-6, libxi6, libxtst6, libxrandr2, '
+DEPENDENCIES = ('libc6 (>= 2.35), libstdc++6, libgcc-s1, libx11-6, libxi6, libxtst6, libxfixes3, libxrandr2, '
                 'libxss1, libxkbcommon0, libxkbcommon-x11-0, libxcb1, libxcb-cursor0, libxcb-icccm4, '
                 'libxcb-image0, libxcb-keysyms1, libxcb-randr0, libxcb-render0, libxcb-render-util0, '
                 'libxcb-shape0, libxcb-shm0, libxcb-sync1, libxcb-xfixes0, libxcb-xinerama0, '

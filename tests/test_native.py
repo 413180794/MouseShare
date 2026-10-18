@@ -10,6 +10,14 @@ from mouseshare.input.keymap import HID_TO_MAC, HID_TO_WIN
 
 @pytest.fixture(autouse=True)
 def no_real_cursor_changes(monkeypatch):
+    if sys.platform == 'win32':
+        import mouseshare.input.windows as native
+        class WindowsShield:
+            panels = []
+            def set_enabled(self, enabled):
+                self.panels = [object()] if enabled else []
+        monkeypatch.setattr(native, 'WindowsCursorShield', WindowsShield)
+        return
     if sys.platform != "darwin":
         return
     from types import SimpleNamespace

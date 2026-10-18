@@ -81,6 +81,9 @@ class SaverInfo(C.Structure):
                 ('til_or_since', C.c_ulong), ('idle', C.c_ulong), ('event_mask', C.c_ulong)]
 
 
+_ERROR_HANDLERS = []  # Xlib retains function pointers for the life of the process.
+
+
 class X11:
     def __init__(self):
         def lib(name):
@@ -88,7 +91,7 @@ class X11:
             if not found:
                 raise OSError(f'缺少 X11 系统库：{name}。请按 Linux 安装说明安装依赖。')
             return C.CDLL(found)
-        self.x, self.xi, self.xt, self.rr, self.ss = [lib(n) for n in ['X11', 'Xi', 'Xtst', 'Xrandr', 'Xss']]
+        self.x, self.xi, self.xt, self.rr, self.ss, self.xf = [lib(n) for n in ['X11', 'Xi', 'Xtst', 'Xrandr', 'Xss', 'Xfixes']]
         D, U, Int, P = C.c_void_p, C.c_ulong, C.c_int, C.POINTER
         specs = [
             (self.x, 'XInitThreads', Int, []), (self.x, 'XOpenDisplay', D, [C.c_char_p]),
@@ -108,6 +111,10 @@ class X11:
             (self.x, 'XGrabPointer', Int, [D, U, Int, C.c_uint, Int, Int, U, U, U]),
             (self.x, 'XGrabKeyboard', Int, [D, U, Int, Int, Int, U]),
             (self.x, 'XUngrabPointer', Int, [D, U]), (self.x, 'XUngrabKeyboard', Int, [D, U]),
+            (self.x, 'XGetInputFocus', Int, [D, P(U), P(Int)]),
+            (self.x, 'XGrabKey', Int, [D, Int, C.c_uint, U, Int, Int, Int]),
+            (self.x, 'XUngrabKey', Int, [D, Int, C.c_uint, U]),
+            (self.xf, 'XFixesHideCursor', None, [D, U]), (self.xf, 'XFixesShowCursor', None, [D, U]),
             (self.xi, 'XIQueryVersion', Int, [D, P(Int), P(Int)]),
             (self.xi, 'XISelectEvents', Int, [D, U, P(EventMask), Int]),
             (self.xi, 'XIQueryDevice', P(DeviceInfo), [D, Int, P(Int)]),
@@ -127,6 +134,25 @@ class X11:
             fn.restype, fn.argtypes = result, args
         if not self.x.XInitThreads():
             raise OSError('无法初始化 X11 线程支持')
+        # Passive hotkeys may already be owned by the desktop. Preserve the
+        # connection and record the failed grab instead of Xlib exiting.
+        self.grab_errors = set()
+        class Error(C.Structure):
+            _fields_ = [('type', Int), ('display', D), ('resourceid', U), ('serial', U),
+                        ('error_code', C.c_ubyte), ('request_code', C.c_ubyte), ('minor_code', C.c_ubyte)]
+        handler = C.CFUNCTYPE(Int, D, P(Error))
+        self.x.XSetErrorHandler.argtypes = [handler]
+        self.x.XSetErrorHandler.restype = C.c_void_p
+        previous = []
+        def error_handler(display, error):
+            if error.contents.request_code == 33:  # GrabKey / BadAccess
+                self.grab_errors.add(error.contents.serial)
+            elif previous and previous[0]:
+                return handler(previous[0])(display, error)
+            return 0
+        self.error_handler = handler(error_handler)
+        previous.append(self.x.XSetErrorHandler(self.error_handler))
+        _ERROR_HANDLERS.append(self.error_handler)
 
 
 def raw_axes(raw):
@@ -141,7 +167,7 @@ def raw_axes(raw):
 
 
 class LinuxBackend(BaseBackend):
-    shortcuts = {41: 'panic', 10: 'game'}
+    shortcuts = {41: 'panic', 10: 'game', 6: 'share_copy', 25: 'share_paste'}
     shortcut_modifiers = (CTRL, ALT, {225, 229})
     def __init__(self, emit):
         super().__init__(emit)
@@ -155,6 +181,8 @@ class LinuxBackend(BaseBackend):
         self.saver_available = False
         self._bounds = (0, 0, 1920, 1080)
         self.scroll_remainder = [0.0, 0.0]
+        self.shortcut_grabs = set()
+        self.shortcut_grab_error = False
 
     def open(self):
         if self.display:
@@ -231,6 +259,7 @@ class LinuxBackend(BaseBackend):
             while not self.stopping.is_set():
                 packet = None
                 with self.lock:
+                    self.refresh_shortcut_grabs()
                     if x.XPending(self.display):
                         event = Event()
                         x.XNextEvent(self.display, C.byref(event))
@@ -254,6 +283,37 @@ class LinuxBackend(BaseBackend):
             self.running = False
             self.started.set()
             self.capture(False)
+
+    def refresh_shortcut_grabs(self, suspend=False):
+        desired = set()
+        if not suspend and self.running:
+            if self.sharing_shortcuts_enabled:
+                desired.update((HID_TO_X11[key], 4 | 8 | 1 | locks) for key in (6, 25) for locks in (0, 2, 16, 18))
+            if self.native_file_paste_ready:
+                desired.update((HID_TO_X11[25], 4 | locks) for locks in (0, 2, 16, 18))
+        x = self.api.x
+        for key, modifiers in self.shortcut_grabs - desired:
+            x.XUngrabKey(self.display, key, modifiers, self.root)
+        for key, modifiers in desired - self.shortcut_grabs:
+            x.XGrabKey(self.display, key, modifiers, self.root, False, 1, 1)
+        if desired != self.shortcut_grabs:
+            x.XSync(self.display, False)
+            self.shortcut_grab_error = self.shortcut_grab_error or bool(self.api.grab_errors)
+            self.api.grab_errors.clear()
+        self.shortcut_grabs = desired
+
+    def clipboard_shortcut(self, action):
+        with self.lock:
+            self.open()
+            # End this client's passive key grab so the injected shortcut is
+            # delivered to the existing focused application.
+            self.api.x.XUngrabKeyboard(self.display, 0)
+            self.refresh_shortcut_grabs(suspend=True)
+            try:
+                super().clipboard_shortcut(action)
+                self.api.x.XSync(self.display, False)
+            finally:
+                self.refresh_shortcut_grabs()
 
     def position(self):
         with self.lock:
@@ -391,8 +451,25 @@ class LinuxBackend(BaseBackend):
             success = self.api.ss.XScreenSaverQueryInfo(self.display, self.root, C.byref(info))
             return not success or info.state != 1
 
+    def focus_token(self):
+        with self.lock:
+            if not self.display:
+                return None
+            window, revert = C.c_ulong(), C.c_int()
+            self.api.x.XGetInputFocus(self.display, C.byref(window), C.byref(revert))
+            return window.value if window.value > 1 else None
+
+    def cursor_hidden(self, hidden):
+        with self.lock:
+            if self.display and bool(hidden) != self.cursor_is_hidden:
+                fn = self.api.xf.XFixesHideCursor if hidden else self.api.xf.XFixesShowCursor
+                fn(self.display, self.root)
+                self.api.x.XFlush(self.display)
+            self.cursor_is_hidden = bool(hidden)
+
     def stop(self):
         self.stopping.set()
+        self.cursor_hidden(False)
         super().stop()
         if self.thread and self.thread is not threading.current_thread():
             self.thread.join(1)
