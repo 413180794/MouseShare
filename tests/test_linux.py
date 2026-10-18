@@ -197,3 +197,55 @@ def test_linux_startup_is_user_scoped_and_removable(monkeypatch, tmp_path):
     assert path.exists() and '--minimized' in path.read_text()
     startup.set_enabled(False)
     assert not path.exists()
+
+
+@native
+def test_native_x11_clipboard_between_processes(tmp_path):
+    producer = r'''
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QMimeData, QTimer, QUrl
+from PySide6.QtGui import QImage
+app = QApplication([])
+mime = QMimeData()
+mime.setText('MouseShare 中文 clipboard')
+mime.setHtml('<b>MouseShare 中文 clipboard</b>')
+image = QImage(8, 8, QImage.Format.Format_ARGB32)
+image.fill(0xff123456)
+mime.setImageData(image)
+mime.setUrls([QUrl.fromLocalFile('/tmp/中文 file.txt')])
+mime.setData('x-special/gnome-copied-files', b'copy\nfile:///tmp/example.txt')
+app.clipboard().setMimeData(mime)
+print('ready', flush=True)
+QTimer.singleShot(10000, app.quit)
+app.exec()
+'''
+    consumer = r'''
+import json
+from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QTimer
+app = QApplication([])
+def read():
+    mime = app.clipboard().mimeData()
+    image = mime.imageData()
+    print(json.dumps(dict(text=mime.text(), html=mime.html(), pixel=image.pixel(0, 0),
+                          paths=[u.toLocalFile() for u in mime.urls()],
+                          gnome=bytes(mime.data('x-special/gnome-copied-files')).decode())), flush=True)
+    app.quit()
+QTimer.singleShot(0, read)
+app.exec()
+'''
+    env = {**os.environ, 'QT_QPA_PLATFORM': 'xcb'}
+    owner = subprocess.Popen([sys.executable, '-c', producer], env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, text=True)
+    try:
+        assert owner.stdout.readline().strip() == 'ready'
+        result = subprocess.run([sys.executable, '-c', consumer], env=env, capture_output=True, text=True,
+                                timeout=8, check=True)
+        value = json.loads(result.stdout)
+        assert value['text'] == 'MouseShare 中文 clipboard'
+        assert value['html'] == '<b>MouseShare 中文 clipboard</b>'
+        assert value['pixel'] == 0xff123456 and value['paths'] == ['/tmp/中文 file.txt']
+        assert value['gnome'] == 'copy\nfile:///tmp/example.txt'
+    finally:
+        owner.terminate()
+        owner.communicate(timeout=3)
