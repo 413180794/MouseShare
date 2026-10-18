@@ -33,3 +33,19 @@ def test_custom_list_is_preserved_and_defaults_can_be_added_idempotently(tmp_pat
     assert merged[:2] == custom and merged.count('cs2.exe') == 0
     assert 'DeltaForceClient-Win64-Shipping.exe' in merged
     assert add_defaults(merged) == merged
+
+
+def test_delta_force_triggers_foreground_game_protection_without_fullscreen(tmp_path):
+    from mouseshare.engine import Engine
+    from mouseshare.input.base import NullBackend
+    settings = Settings(tmp_path)
+    engine = Engine(settings, clock=lambda: 100)
+    engine.backend = NullBackend(lambda event: True)
+    engine.backend.running = True
+    engine.backend.foreground = lambda: ('deltaforceclient-win64-shipping.EXE', False)
+    engine.tick()
+    assert engine.game and 'deltaforce' in engine.auto_reason.casefold()
+    engine.backend.foreground = lambda: ('steam.exe', False)
+    engine.last_auto = 0
+    engine.tick()
+    assert not engine.game

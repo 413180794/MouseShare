@@ -166,3 +166,34 @@ def test_native_keyboard_grab_suppresses_focus_and_injection_has_no_echo():
         backend.stop()
         x.XDestroyWindow(display, window)
         x.XCloseDisplay(display)
+
+
+@native
+def test_native_linux_window_and_session_monitor_startup(tmp_path):
+    from PySide6.QtWidgets import QApplication
+    from mouseshare.app import MainWindow
+    from mouseshare.config import Settings
+    from mouseshare.security import Identity
+    app = QApplication.instance() or QApplication([])
+    settings = Settings(tmp_path)
+    window = MainWindow(settings, Identity(tmp_path))
+    try:
+        app.processEvents()
+        assert window.backend.ready(), window.backend.error
+        assert window.linux_session.timer.isActive()
+        assert 'Linux' == window.screen_map.local_os
+    finally:
+        window.shutdown()
+        window.close()
+    assert not window.linux_session.timer.isActive()
+
+
+def test_linux_startup_is_user_scoped_and_removable(monkeypatch, tmp_path):
+    import mouseshare.startup as startup
+    monkeypatch.setattr(startup.sys, 'platform', 'linux')
+    monkeypatch.setenv('XDG_CONFIG_HOME', str(tmp_path))
+    startup.set_enabled(True)
+    path = tmp_path / 'autostart/mouseshare.desktop'
+    assert path.exists() and '--minimized' in path.read_text()
+    startup.set_enabled(False)
+    assert not path.exists()

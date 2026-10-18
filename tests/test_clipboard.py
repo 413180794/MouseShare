@@ -114,3 +114,30 @@ def test_recopied_identical_content_resends_after_connection_or_failed_attempt(a
         assert len(sent) == 2 and sent[0] == sent[1]
     finally:
         watcher.stop()
+
+
+def test_wayland_foreground_manual_sync_and_pending_apply(app, tmp_path, monkeypatch):
+    import mouseshare.clipboard as module
+    monkeypatch.setattr(module, 'wayland_session', lambda: True)
+    settings = Settings(tmp_path)
+    clipboard = SimpleNamespace(mimeData=lambda: clipboard.mime,
+                                setMimeData=lambda mime: setattr(clipboard, 'mime', mime))
+    clipboard.mime = QMimeData()
+    clipboard.mime.setText('explicit copy')
+    sent = []
+    service = SimpleNamespace(network=SimpleNamespace(session=object()), enabled=lambda kind: True,
+                              send_clipboard=sent.append)
+    watcher = ClipboardSync(service, settings, clipboard=clipboard)
+    try:
+        watcher.poll()
+        assert not sent
+        watcher.send_current()
+        assert json.loads(sent[-1]) == {'text': 'explicit copy'}
+        watcher.apply(b'{"text":"remote"}')
+        assert clipboard.mime.text() == 'explicit copy'
+        watcher.apply_pending()
+        assert clipboard.mime.text() == 'remote'
+        watcher.send_current()
+        assert json.loads(sent[-1]) == {'text': 'remote'}
+    finally:
+        watcher.stop()
