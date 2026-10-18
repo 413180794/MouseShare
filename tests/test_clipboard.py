@@ -90,3 +90,27 @@ def test_poll_only_new_copies_never_stale_or_received_contents(app, tmp_path):
         assert len(sent) == 1
     finally:
         watcher.stop()
+
+
+def test_recopied_identical_content_resends_after_connection_or_failed_attempt(app, tmp_path):
+    settings = Settings(tmp_path)
+    clipboard = SimpleNamespace(mimeData=lambda: clipboard.mime)
+    clipboard.mime = QMimeData()
+    clipboard.mime.setText('same text')
+    sent, sequence = [], [1]
+    service = SimpleNamespace(network=SimpleNamespace(session=SimpleNamespace(connected=True, peer_features=['sharing-v1'])),
+                              enabled=lambda kind: True, send_clipboard=sent.append)
+    watcher = ClipboardSync(service, settings, clipboard=clipboard, sequence_provider=lambda: sequence[0])
+    try:
+        watcher.poll()
+        assert not sent
+        sequence[0] += 1
+        watcher.poll()
+        assert len(sent) == 1
+        watcher.poll()
+        assert len(sent) == 1
+        sequence[0] += 1
+        watcher.poll()
+        assert len(sent) == 2 and sent[0] == sent[1]
+    finally:
+        watcher.stop()

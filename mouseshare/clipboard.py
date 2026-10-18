@@ -87,10 +87,12 @@ def files_mime(paths, mark=True):
 
 
 class ClipboardSync(QObject):
-    def __init__(self, service, settings, status=lambda text: None, parent=None, clipboard=None):
+    def __init__(self, service, settings, status=lambda text: None, parent=None, clipboard=None,
+                 sequence_provider=None):
         super().__init__(parent)
         self.service, self.settings, self.status = service, settings, status
         self.clipboard = clipboard or QApplication.clipboard()
+        self.sequence_provider = sequence_provider or (self.sequence if clipboard is None else lambda: None)
         self.last = None
         self.active = False
         self.generation = 0
@@ -127,7 +129,7 @@ class ClipboardSync(QObject):
         try:
             # Qt's macOS dataChanged notification waits for application activation.
             # Native sequence polling detects background copies and avoids re-encoding unchanged images.
-            sequence = self.sequence() if self.clipboard is QApplication.clipboard() else None
+            sequence = self.sequence_provider()
             if self.active and sequence is not None and sequence == self.last_sequence:
                 return
             self.last_sequence = sequence
@@ -141,7 +143,7 @@ class ClipboardSync(QObject):
             if not self.active:
                 self.active, self.last = True, fingerprint
                 return  # Never send clipboard contents that predate the connection.
-            if fingerprint == self.last:
+            if fingerprint == self.last and sequence is None:
                 return
             self.last = fingerprint
             self.generation += 1
