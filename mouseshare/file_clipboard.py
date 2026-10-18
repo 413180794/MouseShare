@@ -86,6 +86,8 @@ class FileClipboard(QObject):
             if session and (self.engine.state != 'receiving' or self.engine.session is not session
                             or event.get('flow') != self.engine.flow):
                 return
+            if session is None and self.engine.state != 'local':
+                return
             self.action(event['action'])
         elif kind == 'peer_connected':
             self.send(event['session'], dict(type='paste_ready', ready=bool(self.ready_sent)))
