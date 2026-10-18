@@ -8,6 +8,8 @@ ALT = {226, 230}
 
 
 class BaseBackend:
+    shortcuts = {41: "panic", 69: "game"}
+    shortcut_modifiers = (CTRL, ALT)
     def __init__(self, emit):
         self.emit = emit
         self.captured = False
@@ -33,10 +35,10 @@ class BaseBackend:
                 if not down:
                     self.hotkey_keys.discard(key)
                 return True
-            if down and (self.keys & CTRL) and (self.keys & ALT) and key in {41, 69}:
+            if down and all(self.keys & group for group in self.shortcut_modifiers) and key in self.shortcuts:
                 self.hotkey_keys.add(key)
                 self.capture(False)
-                self.emit({"type": "command", "action": "panic" if key == 41 else "game"})
+                self.emit({"type": "command", "action": self.shortcuts[key]})
                 return True
         elif event["type"] == "button":
             if event["down"]:
@@ -86,9 +88,9 @@ class BaseBackend:
 
 
 class NullBackend(BaseBackend):
-    """Headless test backend. Linux is deliberately unsupported for input capture."""
+    """Headless test backend for state-machine tests and unsupported platforms."""
     def start(self):
-        self.error = "仅支持 Windows 和 macOS"
+        self.error = "当前平台缺少原生键鼠输入服务"
 
     def move(self, x, y):
         pass

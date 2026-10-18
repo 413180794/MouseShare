@@ -4,6 +4,7 @@ import hashlib
 import json
 import struct
 import sys
+import os
 
 from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QMimeData, QObject, QTimer, QUrl
 from PySide6.QtGui import QImage, QImageReader
@@ -17,8 +18,13 @@ PRIVATE = {'org.nspasteboard.ConcealedType', 'org.nspasteboard.TransientType',
 MAX_PIXELS = 16_000_000
 
 
-def encode_clipboard(mime, images=True):
-    if not mime or mime.hasFormat(ORIGIN) or any(mime.hasFormat(kind) for kind in PRIVATE):
+def wayland_session():
+    return sys.platform.startswith('linux') and (os.environ.get('XDG_SESSION_TYPE', '').lower() == 'wayland'
+                                               or bool(os.environ.get('WAYLAND_DISPLAY')))
+
+
+def encode_clipboard(mime, images=True, include_remote=False):
+    if not mime or (mime.hasFormat(ORIGIN) and not include_remote) or any(mime.hasFormat(kind) for kind in PRIVATE):
         return None, []
     if mime.hasUrls():
         urls = mime.urls()
@@ -96,6 +102,7 @@ class ClipboardSync(QObject):
         self.last = None
         self.active = False
         self.generation = 0
+        self.pending_remote = self.pending_session = None
         self.last_sequence = None
         if hasattr(self.clipboard, 'dataChanged'):
             self.clipboard.dataChanged.connect(self.changed)
@@ -118,6 +125,9 @@ class ClipboardSync(QObject):
         return self.generation
 
     def poll(self):
+        if wayland_session():
+            self.active = False
+            return  # Compositor clipboard access is user-initiated in this release.
         session = self.service.network.session
         active = (self.service.enabled('clipboard') and session and session.connected
                   and 'sharing-v1' in getattr(session, 'peer_features', []))
@@ -159,8 +169,38 @@ class ClipboardSync(QObject):
                 self.last = message
                 self.status(message)
 
-    def apply(self, payload):
+    def send_current(self):
         if not self.service.enabled('clipboard'):
+            self.status('请先连接电脑并开启剪贴板共享，退出游戏模式／暂停状态')
+            return
+        try:
+            payload, paths = encode_clipboard(self.clipboard.mimeData(), self.settings.get('clipboard_images', True),
+                                               include_remote=True)
+            if paths and self.settings.get('clipboard_files', True):
+                self.service.send_files(paths, clipboard=True)
+            elif payload:
+                self.service.send_clipboard(payload)
+            else:
+                self.status('当前剪贴板没有可同步内容')
+                return
+            self.status('已提交当前剪贴板，文件需要对方确认接收')
+        except (ValueError, OSError) as exc:
+            self.status(str(exc))
+
+    def apply_pending(self):
+        payload, session = self.pending_remote, self.pending_session
+        self.pending_remote = self.pending_session = None
+        if payload and session is self.service.network.session:
+            self.apply(payload, manual=True)
+        else:
+            self.status('当前没有待应用的剪贴板；请让对方重新复制')
+
+    def apply(self, payload, manual=False):
+        if not self.service.enabled('clipboard'):
+            return
+        if wayland_session() and not manual:
+            self.pending_remote, self.pending_session = payload, self.service.network.session
+            self.status('已收到剪贴板：请点击「应用收到的剪贴板」，再到目标应用粘贴')
             return
         try:
             mime = decode_clipboard(payload, self.settings.get('clipboard_images', True))
@@ -177,3 +217,4 @@ class ClipboardSync(QObject):
 
     def stop(self):
         self.timer.stop()
+        self.pending_remote = self.pending_session = None

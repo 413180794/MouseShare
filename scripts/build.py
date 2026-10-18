@@ -90,7 +90,7 @@ def main():
         import plistlib
         info = bundle / "Contents/Info.plist"
         content = plistlib.loads(info.read_bytes())
-        content.update({"CFBundleShortVersionString": "0.3.0", "CFBundleVersion": "10",
+        content.update({"CFBundleShortVersionString": "0.4.0", "CFBundleVersion": "11",
                         "LSMinimumSystemVersion": "13.0",
                         "NSLocalNetworkUsageDescription": "自动发现局域网中的电脑，并共享鼠标和键盘。",
                         "NSInputMonitoringUsageDescription": "读取键鼠输入以在您配对的电脑之间切换控制。",
@@ -106,7 +106,7 @@ def main():
         shutil.copytree(bundle, stage / bundle.name, symlinks=True)
         (stage / "Applications").symlink_to("/Applications")
         shutil.copyfile(ROOT / "docs/INSTALL-macOS.txt", stage / "安装说明.txt")
-        target = DIST / f"MouseShare-0.3.0-macOS-{platform.machine()}.dmg"
+        target = DIST / f"MouseShare-0.4.0-macOS-{platform.machine()}.dmg"
         target.unlink(missing_ok=True)
         run("hdiutil", "create", "-volname", "MouseShare", "-srcfolder", stage,
             "-ov", "-format", "UDZO", target)
@@ -116,10 +116,16 @@ def main():
         compiler = Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe")
         run(compiler, ROOT / "packaging/windows.iss")
         shutil.copyfile(ROOT / "docs/INSTALL-Windows.txt", DIST / "MouseShare/安装说明.txt")
-        shutil.make_archive(str(DIST / "MouseShare-0.3.0-Windows-x64-portable"), "zip",
+        shutil.make_archive(str(DIST / "MouseShare-0.4.0-Windows-x64-portable"), "zip",
                             DIST, "MouseShare")
+    elif sys.platform.startswith("linux"):
+        licenses(DIST / "MouseShare/licenses")
+        run(DIST / "MouseShare/MouseShare", "--smoke-test")
+        sys.path.insert(0, str(ROOT / "packaging"))
+        from linux import build_linux
+        build_linux(ROOT, DIST, "0.4.0")
     else:
-        raise RuntimeError("Build on Windows or macOS")
+        raise RuntimeError("Unsupported build platform")
 
 
 if __name__ == "__main__":

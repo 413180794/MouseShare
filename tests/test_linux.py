@@ -1,0 +1,168 @@
+"""Platform-independent guards plus native checks only on an isolated CI X server."""
+import ctypes as C
+import json
+import os
+import subprocess
+import sys
+import time
+
+import pytest
+
+from mouseshare.input.linux import (Cookie, DeviceInfo, Event, HID_TO_X11, LinuxBackend, Monitor,
+                                    RawEvent, SaverInfo, Valuators, X11, raw_axes, session_problem)
+from mouseshare.startup import desktop_entry
+
+
+def wait_for(predicate):
+    until = time.monotonic() + 4
+    while time.monotonic() < until:
+        if predicate():
+            return
+        time.sleep(0.01)
+    raise AssertionError('X11 event timeout')
+
+
+def test_session_guard_rejects_xwayland_and_missing_display():
+    assert not session_problem({'DISPLAY': ':0', 'XDG_SESSION_TYPE': 'x11'})
+    assert 'Wayland' in session_problem({'DISPLAY': ':0', 'XDG_SESSION_TYPE': 'wayland'})
+    assert 'Wayland' in session_problem({'DISPLAY': ':0', 'WAYLAND_DISPLAY': 'wayland-0'})
+    assert '图形桌面' in session_problem({})
+
+
+def test_hid_positions_and_linux_shortcuts_avoid_virtual_terminal_keys():
+    assert all(key in HID_TO_X11 for key in [*range(4, 30), 40, 41, 44, *range(58, 70),
+                                            *range(79, 83), *range(224, 232)])
+    events = []
+    backend = LinuxBackend(events.append)
+    for key in [224, 226, 69]:
+        backend.physical(dict(type='key', key=key, down=True))
+    assert not any(e.get('type') == 'command' for e in events)
+    backend.physical(dict(type='key', key=225, down=True))
+    backend.physical(dict(type='key', key=10, down=True))
+    assert events[-1] == {'type': 'command', 'action': 'game'}
+    backend.physical(dict(type='key', key=41, down=True))
+    assert events[-1] == {'type': 'command', 'action': 'panic'}
+
+
+def test_raw_valuators_sparse_axes_and_injection_filter():
+    mask = (C.c_ubyte * 1)(0b101)
+    values = (C.c_double * 2)(5.5, -2)
+    event = RawEvent(valuators=Valuators(1, mask, values), raw_values=values)
+    assert raw_axes(event) == {0: 5.5, 2: -2}
+    events = []
+    backend = LinuxBackend(events.append)
+    backend.position = lambda: (123, 456)
+    backend.test_sources = {99}
+    backend.raw_input(17, 99, 0, {0: 20, 1: 30})
+    assert not events
+    backend.raw_input(17, 100, 0, {0: 20, 1: 30})
+    assert events[-1] == dict(type='move', x=123, y=456, dx=20, dy=30)
+    backend.raw_input(15, 100, 3, {})
+    assert events[-1] == dict(type='button', button=2, down=True)
+    backend.raw_input(15, 100, 4, {})
+    assert events[-1] == dict(type='scroll', dx=0, dy=1)
+
+
+def test_desktop_exec_quotes_paths_without_shell_interpretation():
+    result = desktop_entry(['/path with space/$folder/MouseShare', '--minimized', '100%'])
+    assert '"/path with space/\\$folder/MouseShare"' in result and '"100%%"' in result
+    with pytest.raises(OSError):
+        desktop_entry(['/path\nExec=evil'])
+
+
+native = pytest.mark.skipif(sys.platform != 'linux' or os.environ.get('MOUSESHARE_X11_TEST') != '1',
+                            reason='Requires isolated Xvfb; never inject into a user desktop')
+
+
+@native
+def test_native_struct_abi_matches_system_headers(tmp_path):
+    source = tmp_path / 'abi.c'
+    source.write_text('''#include <stdio.h>
+#include <stddef.h>
+#include <X11/Xlib.h>
+#include <X11/extensions/XInput2.h>
+#include <X11/extensions/Xrandr.h>
+#include <X11/extensions/scrnsaver.h>
+int main(void) {printf("[%zu,%zu,%zu,%zu,%zu,%zu,%zu]", sizeof(XEvent), sizeof(XGenericEventCookie), sizeof(XIRawEvent), sizeof(XIDeviceInfo), sizeof(XRRMonitorInfo), sizeof(XScreenSaverInfo), offsetof(XIRawEvent, valuators));}''')
+    subprocess.run(['cc', str(source), '-o', str(tmp_path / 'abi')], check=True)
+    sizes = json.loads(subprocess.check_output([str(tmp_path / 'abi')]))
+    assert sizes == [C.sizeof(t) for t in [Event, Cookie, RawEvent, DeviceInfo, Monitor, SaverInfo]] + [RawEvent.valuators.offset]
+
+
+@native
+def test_native_source_anchor_raw_motion_and_local_recovery():
+    events = []
+    backend = LinuxBackend(events.append)
+    backend.start()
+    try:
+        assert backend.ready(), backend.error
+        assert backend.test_sources
+        assert backend.bounds()[2:] == (1920, 1080)
+        backend.move(1918, 500)
+        with backend.lock:
+            backend.api.x.XSync(backend.display, False)
+        assert backend.position() == (1918, 500)
+        backend.capture(True)
+        with backend.lock:
+            backend.api.xt.XTestFakeRelativeMotionEvent(backend.display, 120, -200, 0)
+            backend.api.x.XSync(backend.display, False)
+        assert backend.position() == (1918, 500)
+        backend.raw_input(17, -1, 0, {0: 120, 1: -200})
+        assert events[-1]['dx'] == 120 and events[-1]['dy'] == -200
+        backend.capture(False)
+        assert not backend.window and not backend.captured
+        backend.move(1911, 500)
+        with backend.lock:
+            backend.api.x.XSync(backend.display, False)
+        assert backend.position() == (1911, 500)
+        backend.key(225, True)
+        backend.button(1, True)
+        backend.release_all()
+        assert not backend.injected_keys and not backend.injected_buttons
+    finally:
+        backend.stop()
+    assert not backend.display and not backend.running
+
+
+@native
+def test_native_keyboard_grab_suppresses_focus_and_injection_has_no_echo():
+    events = []
+    backend = LinuxBackend(events.append)
+    backend.start()
+    api = X11()
+    x = api.x
+    display = x.XOpenDisplay(None)
+    U, D, Int = C.c_ulong, C.c_void_p, C.c_int
+    x.XCreateSimpleWindow.restype = U
+    x.XCreateSimpleWindow.argtypes = [D, U, Int, Int, C.c_uint, C.c_uint, C.c_uint, U, U]
+    x.XSelectInput.argtypes = [D, U, C.c_long]
+    x.XSetInputFocus.argtypes = [D, U, Int, U]
+    window = x.XCreateSimpleWindow(display, x.XDefaultRootWindow(display), 10, 10, 100, 100, 0, 0, 0)
+    try:
+        assert backend.ready(), backend.error
+        x.XSelectInput(display, window, 3)
+        x.XMapWindow(display, window)
+        x.XSetInputFocus(display, window, 1, 0)
+        x.XSync(display, False)
+        backend.key(4, True)
+        backend.key(4, False)
+        wait_for(lambda: x.XPending(display) >= 2)
+        types = []
+        while x.XPending(display):
+            event = Event()
+            x.XNextEvent(display, C.byref(event))
+            types.append(event.cookie.type)
+        assert 2 in types and 3 in types
+        backend.capture(True)
+        backend.key(5, True)
+        backend.key(5, False)
+        with backend.lock:
+            backend.api.x.XSync(backend.display, False)
+        x.XSync(display, False)
+        assert not x.XPending(display)
+        assert not events
+        backend.capture(False)
+    finally:
+        backend.stop()
+        x.XDestroyWindow(display, window)
+        x.XCloseDisplay(display)

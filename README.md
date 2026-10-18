@@ -1,10 +1,12 @@
 # MouseShare
 
-Windows / macOS 局域网鼠标键盘、剪贴板和文件共享。鼠标在指定屏幕边缘稍作停留后进入另一台电脑，键盘随之切换；沿原路移回即可返回。
+[简体中文](README.md) · [English](README.en.md)
+
+Windows / macOS / Linux（X11）局域网鼠标键盘、剪贴板和文件共享。鼠标在指定屏幕边缘稍作停留后进入另一台电脑，键盘随之切换；沿原路移回即可返回。
 
 [下载安装包](https://github.com/413180794/MouseShare/releases) · [构建记录](https://github.com/413180794/MouseShare/actions) · [双机验收清单](docs/ACCEPTANCE.md)
 
-**v0.3.0 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
+**v0.4.0 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；真实桌面交互、系统授权及具体游戏环境仍需按验收清单确认。Linux 暂无实体电脑验收，CI 使用隔离 Xvfb 验证。
 
 ![MouseShare 界面示意，设备数据为演示数据](docs/screenshot.png)
 
@@ -12,10 +14,12 @@ Windows / macOS 局域网鼠标键盘、剪贴板和文件共享。鼠标在指�
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.3.0-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
-| Apple Silicon Mac，macOS 13+ | `MouseShare-0.3.0-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Intel Mac，macOS 13+ | `MouseShare-0.3.0-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Windows 便携版 | `MouseShare-0.3.0-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
+| Windows 10/11 x64 | `MouseShare-0.4.0-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
+| Apple Silicon Mac，macOS 13+ | `MouseShare-0.4.0-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Intel Mac，macOS 13+ | `MouseShare-0.4.0-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Linux x64，Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.4.0-Linux-x64.deb` 或 `.tar.gz` | `sudo apt install ./文件名.deb`；便携包解压运行 |
+| Linux ARM64，同上 | `MouseShare-0.4.0-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
+| Windows 便携版 | `MouseShare-0.4.0-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
 
@@ -31,6 +35,8 @@ macOS 首次运行缺少权限时，会显示设置向导；也可点击首页�
 
 ![Mac 权限向导，权限状态为演示数据](docs/permissions.png)
 
+Linux 完整键鼠共享使用 **X11／Xorg** 会话，以当前登录桌面的普通用户运行。Wayland 提供文件传输与前台手动剪贴板操作；完整键鼠共享请注销后在登录会话中选择 X11／Xorg。Linux 无需 root、input 组或放宽 X11 访问控制。系统依赖、便携安装与开机启动见 [Linux 安装说明](docs/INSTALL-Linux.txt)。
+
 ## 两台电脑首次连接
 
 1. 两台电脑加入同一可信局域网，并分别启动 MouseShare。
@@ -43,14 +49,14 @@ macOS 首次运行缺少权限时，会显示设置向导；也可点击首页�
 
 ## 游戏模式与收回控制
 
-| 操作 | Windows | Mac |
-| --- | --- | --- |
-| 切换手动游戏模式 | `Ctrl + Alt + F12` | `Control + Option + F12`（部分键盘需 Fn） |
-| 立即收回键鼠 | `Ctrl + Alt + Esc` | `Control + Option + Esc` |
+| 操作 | Windows | Mac | Linux X11 |
+| --- | --- | --- | --- |
+| 切换手动游戏模式 | `Ctrl + Alt + F12` | `Control + Option + F12`（部分键盘需 Fn） | `Ctrl + Alt + Shift + G` |
+| 立即收回键鼠 | `Ctrl + Alt + Esc` | `Control + Option + Esc` | `Ctrl + Alt + Shift + Esc` |
 
 界面和托盘／菜单栏均有对应按钮。**游戏模式会暂停本机与远端的双向共享，把实体键鼠留在本机。** 手动开关持久保存，重启应用仍保持。
 
-Windows 还自动检测前台全屏窗口及配置中的游戏进程，例如 `League of Legends.exe`、`VALORANT-Win64-Shipping.exe`、`cs2.exe`。游戏进程名可在设置中用分号分隔。全屏视频也会触发，可关闭全屏检测并保留进程检测。Mac 当前提供手动游戏模式。自动保护和游戏进程名单位于独立的「游戏模式」页面。
+Windows 自动检测前台全屏窗口及游戏进程。默认已加入 32 组常见游戏，包括三角洲行动、英雄联盟／云顶之弈、无畏契约、CS2、PUBG、Apex、Fortnite、守望先锋、永劫无间、原神、星穹铁道、绝区零、漫威争锋、黑神话：悟空、ARC Raiders、战地 6 等。[完整进程名单](docs/GAMES.md)。旧版原始默认名单会自动扩展；自定义名单保留，可点击「补齐热门游戏名单」后保存。游戏进程名可在设置中用分号分隔。全屏视频也会触发，可关闭全屏检测并保留进程检测。Mac 和 Linux 当前提供手动游戏模式。Linux 使用三键组合避开虚拟终端快捷键。自动保护和游戏进程名单位于独立的「游戏模式」页面。
 
 当自动检测仍在触发时，关闭手动开关会继续保持游戏模式，界面显示触发原因。最稳妥的使用方式是在启动游戏前主动打开游戏模式。反作弊系统可能限制输入钩子或合成输入，具体游戏需要实机验证。
 
@@ -69,7 +75,7 @@ Windows 还自动检测前台全屏窗口及配置中的游戏进程，例如 `L
 
 文字、富文本和图片在连接后复制即可同步。复制文件／文件夹会发起传输，对方确认接收后可粘贴；还可拖进软件或屏幕边缘的投递口，在接收端从记录拖出。提供进度／速度、取消、重新发送、接收目录、同名保护和本机记录。游戏模式与暂停同时停止内容共享。
 
-[操作方式、容量限制与后续计划](docs/SHARING.md)。两端均需升级至 v0.3.0。文件拖放采用投递口交接，接收完成后拖入本机应用。
+[操作方式、容量限制与后续计划](docs/SHARING.md)。内容共享兼容 v0.3.0+；Linux 端使用 v0.4.0+。Wayland 通过「同步当前剪贴板／应用收到的剪贴板」按钮在前台操作。文件拖放采用投递口交接，接收完成后拖入本机应用。
 
 ![文件与剪贴板界面，任务为演示数据](docs/sharing.png)
 
@@ -92,8 +98,9 @@ Windows 还自动检测前台全屏窗口及配置中的游戏进程，例如 `L
 | --- | --- |
 | Windows | `%LOCALAPPDATA%\MouseShare` |
 | macOS | `~/Library/Application Support/MouseShare` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/MouseShare` |
 
-目录保存 `settings.json`、`transfers.json` 传输元数据、设备证书与私钥，应按敏感本机数据保护。macOS 使用用户私有目录／文件权限；Windows 使用当前用户目录的系统 ACL。卸载保留数据，方便重装；完全清除时先关闭登录启动、退出应用并删除该目录。Mac 登录项文件为 `~/Library/LaunchAgents/io.github.makesail.mouseshare.plist`。
+目录保存 `settings.json`、`transfers.json` 传输元数据、设备证书与私钥，应按敏感本机数据保护。macOS 使用用户私有目录／文件权限；Windows 使用当前用户目录的系统 ACL。卸载保留数据，方便重装；完全清除时先关闭登录启动、退出应用并删除该目录。Mac 登录项文件为 `~/Library/LaunchAgents/io.github.makesail.mouseshare.plist`；Linux 使用 `${XDG_CONFIG_HOME:-~/.config}/autostart/mouseshare.desktop`。
 
 ## 开发与验证
 
@@ -116,9 +123,9 @@ python -m mouseshare
 python scripts/build.py
 ```
 
-Windows 构建需安装 Inno Setup 6；Mac 构建需命令行开发工具和 `iconutil`。必须在对应操作系统及架构构建。GitHub Actions 自动测试、生成 Windows Setup／ZIP 和两种架构的 Mac DMG、运行打包程序的依赖检查；推送 `v*` 标签后发布预览版及 SHA-256。
+Windows 构建需安装 Inno Setup 6；Mac 构建需命令行开发工具和 `iconutil`；Linux 使用 `dpkg-deb` 并安装 X11／Qt 系统库。必须在对应操作系统及架构构建。GitHub Actions 自动测试、生成 Windows Setup／ZIP 和两种架构的 Mac DMG、两种 Linux 架构的 DEB／tar.gz、运行打包程序的依赖检查；推送 `v*` 标签后发布预览版及 SHA-256。
 
-目录：`mouseshare/engine.py` 管理输入所有权与游戏模式，`network.py` 管理发现／TLS／心跳，`security.py` 管理配对身份，`input/` 实现 Win32 和 Quartz 接口，`app.py` 提供控制界面。
+目录：`mouseshare/engine.py` 管理输入所有权与游戏模式，`network.py` 管理发现／TLS／心跳，`security.py` 管理配对身份，`input/` 实现 Win32、Quartz 和 XInput2／XTEST 接口，`app.py` 提供控制界面。
 
 MIT。第三方组件许可见 [THIRD_PARTY.md](THIRD_PARTY.md) 及安装包中的 `licenses` 目录。
 

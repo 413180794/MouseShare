@@ -8,7 +8,7 @@ from PySide6.QtGui import QDesktopServices, QDrag
 from PySide6.QtWidgets import (QApplication, QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLayout,
                                QLineEdit, QProgressBar, QPushButton, QVBoxLayout, QWidget, QSizePolicy)
 
-from .clipboard import files_mime
+from .clipboard import files_mime, wayland_session
 from .ui import card, text_label
 
 
@@ -111,6 +111,16 @@ class SharePanel(QWidget):
             body.addWidget(checkbox)
         self.clipboard_images.setEnabled(self.clipboard_enabled.isChecked())
         self.clipboard_files.setEnabled(self.clipboard_enabled.isChecked())
+        actions = QHBoxLayout()
+        sync = QPushButton('同步当前剪贴板')
+        sync.clicked.connect(lambda: window.clipboard_sync.send_current() if window.clipboard_sync else None)
+        actions.addWidget(sync)
+        if wayland_session():
+            apply = QPushButton('应用收到的剪贴板')
+            apply.clicked.connect(lambda: window.clipboard_sync.apply_pending() if window.clipboard_sync else None)
+            actions.addWidget(apply)
+            body.addWidget(text_label('Wayland 会话使用前台手动同步；X11 会话可自动同步。', 'hint', True))
+        body.addLayout(actions)
         layout.addWidget(box)
         box, body = card('文件传输', '文件与文件夹均以副本发送，接收后校验完整性。')
         self.files_enabled = QCheckBox('开启文件共享')
@@ -268,7 +278,7 @@ class SharePanel(QWidget):
             button('打开所在文件夹', lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(paths[0]).parent))))
             button('复制文件', lambda: self.window.clipboard_sync.copy_files(paths))
             buttons.addWidget(DragFiles(paths))
-            if (persist and previous and previous['status'] != 'complete' and event.get('clipboard')
+            if (persist and not wayland_session() and previous and previous['status'] != 'complete' and event.get('clipboard')
                     and self.window.sharing.enabled('clipboard') and self.window.settings.get('clipboard_files', True)
                     and self.clip_generations.get(key) == self.window.clipboard_sync.sequence()):
                 self.window.clipboard_sync.copy_files(paths)

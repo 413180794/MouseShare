@@ -37,3 +37,25 @@ def set_enabled(enabled):
         else:
             path.unlink(missing_ok=True)
 
+    elif sys.platform.startswith('linux'):
+        path = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'autostart/mouseshare.desktop'
+        if enabled:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(desktop_entry(args), encoding='utf-8')
+            path.chmod(0o600)
+        else:
+            path.unlink(missing_ok=True)
+
+
+def desktop_entry(args):
+    # Desktop Entry Exec has its own escaping rules; no shell is involved.
+    def quote(arg):
+        if '\n' in arg or '\r' in arg or '\0' in arg:
+            raise OSError('启动路径包含无效字符')
+        arg = arg.replace('%', '%%')
+        for char in ('\\', '"', '`', '$'):
+            arg = arg.replace(char, '\\' + char)
+        return '"' + arg + '"'
+    return ('[Desktop Entry]\nType=Application\nName=MouseShare\n'
+            'Comment=Share keyboard, mouse, clipboard and files\nTerminal=false\n'
+            'Categories=Utility;Network;\nExec=' + ' '.join(quote(a) for a in args) + '\n')

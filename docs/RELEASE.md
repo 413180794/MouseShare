@@ -1,16 +1,15 @@
-MouseShare v0.3.0：加入剪贴板与文件共享。
+MouseShare v0.4.0 · Linux X11、热门游戏默认规则与双语 README / Linux X11, game defaults and bilingual documentation
 
-- 文字、HTML 富文本、截图／图片双向同步；剪贴板总开关、图片／文件附加选项、来源标记防回传、后台检测。连接前的剪贴板保留在本机。
-- 文件／文件夹复制和拖放传输：软件投递区、可选屏幕边缘投递口、文件选择、复制文件发送。接收后可复制粘贴或拖进 Finder／资源管理器。
-- 接收确认、可选自动接收、进度／速度／预计时间、取消、重新发送、独立批次目录、SHA-256 校验及本机最近记录。
-- 独立加密数据通道复用原 TCP 端口，保持键鼠通道独立；仅允许已认证并保持连接的配对设备传输。
-- 游戏模式、暂停、锁屏和断线停止共享；失败清理临时文件，保留源文件与已存在的同名文件。
-- 保留 v0.2.5 的界面与权限引导，以及已由用户确认的 v0.2.4 Mac 源端光标冻结与返回逻辑。
+- 新增 Linux X11 键鼠共享，支持 x64 与 ARM64 的 DEB／便携 tar.gz；沿用现有自动发现、加密配对、剪贴板与文件传输。
+- Linux 使用原始输入、XTEST 注入与交接点限制；以普通桌面用户运行。登录启动可选，提供会话检查及 X11／Wayland 指引。
+- Wayland 当前支持文件传输与前台手动剪贴板操作。完整键鼠共享使用 X11／Xorg；原生 Wayland 输入门户适配列为后续工作。
+- Windows 默认加入 32 组常见游戏，包括三角洲行动、英雄联盟／云顶、无畏契约、CS2、PUBG、Apex、Fortnite、漫威争锋、黑神话：悟空、ARC Raiders、战地 6 等。旧版原始默认值自动升级，自定义名单保留，可一键补齐。
+- README 提供中文和英文入口，安装、快捷键、系统权限、共享限制、游戏规则及开发流程均有说明。
 
-两端均升级至 v0.3.0 才能共享内容；与旧版连接保留键鼠功能。文件拖放采用投递口交接，接收完成后再拖入本机应用。连续跨屏拖动、多显示器与断点续传列入后续计划。
+Linux 恢复快捷键：Ctrl+Alt+Shift+Esc；游戏模式：Ctrl+Alt+Shift+G，避开虚拟终端按键。Windows／Mac 快捷键保持原样。
 
-单次文件传输最多 100 GiB／4096 项；文字与富文本合计 2 MiB，整份剪贴板 8 MiB，图片 1600 万像素。操作方式见 [文件与剪贴板](https://github.com/413180794/MouseShare/blob/main/docs/SHARING.md)。
+New Linux X11 support ships as DEB and portable archives for x64/ARM64. Wayland offers file transfer and explicit foreground clipboard operations; full input sharing requires X11/Xorg. The Windows defaults now include 32 common game groups and preserve custom process lists. Chinese and English READMEs cover installation, permissions, shortcuts and current limits.
 
-Windows 下载 `Setup.exe`；Mac Apple Silicon 下载 arm64 DMG，Intel 下载 x86_64 DMG。另提供 Windows 便携 ZIP。所有包内含运行依赖。
+Linux has no physical desktop acceptance yet; CI uses isolated Xvfb input/clipboard displays. Game rules are foreground executable detection rules; individual games and anticheat environments still need acceptance. Content sharing remains compatible with v0.3.0+ peers.
 
-本项目仍为预览版，尚无商业代码签名与 Apple 公证。请核对 `SHA256SUMS.txt`，按 [README](https://github.com/413180794/MouseShare#安装) 完成安装及 Mac 系统授权。已有配对与设置会保留。
+All releases remain previews without commercial signing / Apple notarization. Verify `SHA256SUMS.txt` and use the installation instructions in the repository.

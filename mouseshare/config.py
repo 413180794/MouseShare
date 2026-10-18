@@ -4,6 +4,7 @@ import os
 import platform
 import threading
 from pathlib import Path
+from .games import CATALOG_VERSION, DEFAULT_PROCESSES, upgrade_defaults
 
 
 def data_dir() -> Path:
@@ -28,7 +29,7 @@ class Settings:
             "name": platform.node() or "My computer",
             "side": "right", "dwell_ms": 180, "sensitivity": 1.0,
             "game_mode": False, "auto_fullscreen": True,
-            "game_processes": ["League of Legends.exe", "VALORANT-Win64-Shipping.exe", "cs2.exe"],
+            "game_processes": list(DEFAULT_PROCESSES), "game_catalog_version": CATALOG_VERSION,
             "peers": {}, "startup": False,
         }
         if self.path.exists():
@@ -36,6 +37,7 @@ class Settings:
             if not isinstance(loaded, dict):
                 raise ValueError("Invalid settings file")
             self.values.update(loaded)
+            upgrade_defaults(self.values)
         if self.get("side") not in ("left", "right", "top", "bottom"):
             self.values["side"] = "right"
 

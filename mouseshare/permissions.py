@@ -27,13 +27,14 @@ class PermissionGuide(QDialog):
         self._retried = False
         self.rows = {}
         self.setWindowTitle("MouseShare · 键鼠权限设置")
-        self.resize(620, 700 if self.platform == "darwin" else 380)
+        self.resize(620, 700 if self.platform == "darwin" else 500 if self.platform.startswith('linux') else 380)
         self.setMinimumSize(540, 360)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(26, 24, 26, 20)
         layout.setSpacing(12)
         layout.addWidget(text_label("开启键鼠权限" if self.platform == "darwin" else "检查输入服务", "title"))
         layout.addWidget(text_label("按下面两步完成设置；返回这里后会自动检查。" if self.platform == "darwin"
+                                    else "Linux 键鼠共享使用当前用户的 X11 图形会话。" if self.platform.startswith('linux')
                                     else "Windows 的键鼠共享通过本机输入服务运行。", "subtitle", True))
         self.summary = text_label("", "section", True)
         layout.addWidget(self.summary)
@@ -68,6 +69,16 @@ class PermissionGuide(QDialog):
             body.addWidget(text_label("列表里没有 MouseShare？点击「＋」，从「应用程序」选择 MouseShare.app。\n"
                                       "若系统提示「退出并重新打开」，请按提示操作，再回到这里检查。",
                                       "hint", True))
+        elif self.platform.startswith('linux'):
+            box, section = card('Linux 桌面会话')
+            section.addWidget(text_label('X11／Xorg：以登录桌面的普通用户启动 MouseShare，点击「重新检查」。'
+                                         '安装 .deb 后系统库会自动安装；便携包请按安装说明补齐依赖。', 'hint', True))
+            section.addWidget(text_label('Wayland：请注销，在登录界面的会话菜单选择「Ubuntu on Xorg」或 '
+                                         '「Plasma (X11)」，登录后重新打开。当前版本的 Wayland 可使用文件传输；'
+                                         '剪贴板提供前台手动同步。', 'hint', True))
+            section.addWidget(text_label('无需 root、input 组或放宽 X11 访问控制。远程 SSH 和无图形桌面环境'
+                                         '可先完成安装，在实际桌面登录后使用键鼠共享。', 'hint', True))
+            body.addWidget(box)
         else:
             box, section = card("Windows 输入服务")
             section.addWidget(text_label("如果输入服务未就绪，先点击「重新检查」。仍无法恢复时，请退出并重新打开 "
@@ -139,7 +150,7 @@ class PermissionGuide(QDialog):
                                  else f"已完成 {count} / 2 项，继续开启下方权限。")
         else:
             ready = self.backend.ready()
-            self.summary.setText("输入服务已就绪。" if ready else "输入服务暂未就绪，请重新检查。")
+            self.summary.setText("输入服务已就绪。" if ready else getattr(self.backend, 'error', '') or "输入服务暂未就绪，请重新检查。")
         self.done_button.setText("完成" if ready else "稍后设置")
         role = "primary" if ready else ""
         if self.done_button.objectName() != role:

@@ -1,0 +1,36 @@
+MouseShare 0.4.0 — Linux
+
+Ubuntu 22.04+ / Debian 12+ with an X11 desktop; x64 and ARM64.
+
+Recommended installation:
+  sudo apt install ./MouseShare-0.4.0-Linux-x64.deb
+  ARM64: replace x64 with arm64.
+
+Portable archive:
+  Extract the tar.gz and run MouseShare from the extracted folder.
+  Run `sh install.sh` as your normal user to add it to your application menu.
+  Existing versioned installs are preserved under ~/.local/opt.
+  The archive bundles Python/Qt. Required X11/Qt system libraries are listed in README.
+
+Use an X11 / Xorg session for full input sharing. On Wayland, log out and select
+Ubuntu on Xorg or Plasma (X11) in the login session menu. This release offers
+file transfer and foreground manual clipboard operations on Wayland.
+
+Linux recovery: Ctrl+Alt+Shift+Esc. Game mode: Ctrl+Alt+Shift+G.
+These avoid Linux's Ctrl+Alt+F-key virtual terminal shortcuts.
+
+Run as your logged-in desktop user. Root, input-group membership and xhost changes
+are unnecessary. Auto-start is opt-in in Shared Settings.
+
+Pair the devices by comparing the same six-digit code on both computers.
+TCP 24872 / UDP 24871 must be reachable on your trusted LAN. Existing firewall
+configuration is kept; allow only your LAN subnet if you add rules.
+
+Data: ${XDG_CONFIG_HOME:-~/.config}/MouseShare.
+Removing the application preserves settings, pairing and received files.
+X11 keyboards use the standard evdev/XKB physical keycode layout. Relative mice
+and standard mouse wheels are covered; other layouts, tablet and gaming drivers
+need device-specific acceptance.
+
+This is a preview. No physical Linux computer was available for this release;
+CI exercises input and file/clipboard behavior in isolated Xvfb sessions.
