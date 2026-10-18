@@ -1,10 +1,10 @@
 # MouseShare
 
-Windows / macOS 局域网鼠标键盘共享。鼠标在指定屏幕边缘稍作停留后进入另一台电脑，键盘随之切换；沿原路移回即可返回。
+Windows / macOS 局域网鼠标键盘、剪贴板和文件共享。鼠标在指定屏幕边缘稍作停留后进入另一台电脑，键盘随之切换；沿原路移回即可返回。
 
 [下载安装包](https://github.com/413180794/MouseShare/releases) · [构建记录](https://github.com/413180794/MouseShare/actions) · [双机验收清单](docs/ACCEPTANCE.md)
 
-**v0.2.5 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
+**v0.3.0 为预览版。** 自动测试覆盖真实 TLS 双端通信和控制状态机；实体 Windows ↔ Mac 的交互、系统授权及具体游戏环境仍需按验收清单确认。
 
 ![MouseShare 界面示意，设备数据为演示数据](docs/screenshot.png)
 
@@ -12,10 +12,10 @@ Windows / macOS 局域网鼠标键盘共享。鼠标在指定屏幕边缘稍作�
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.2.5-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
-| Apple Silicon Mac，macOS 13+ | `MouseShare-0.2.5-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Intel Mac，macOS 13+ | `MouseShare-0.2.5-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Windows 便携版 | `MouseShare-0.2.5-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
+| Windows 10/11 x64 | `MouseShare-0.3.0-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
+| Apple Silicon Mac，macOS 13+ | `MouseShare-0.3.0-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Intel Mac，macOS 13+ | `MouseShare-0.3.0-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Windows 便携版 | `MouseShare-0.3.0-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
 
@@ -65,16 +65,24 @@ Windows 还自动检测前台全屏窗口及配置中的游戏进程，例如 `L
 - 默认保留物理修饰键：Windows 键对应 Mac Command，Ctrl 对应 Control。可以在接收端开启「交换 Ctrl 与 ⌘ / Win」以沿用另一台电脑的复制粘贴习惯。
 - 取消配对应在两端分别操作。每个应用当前同时连接一台电脑。
 
+## 文件与剪贴板
+
+文字、富文本和图片在连接后复制即可同步。复制文件／文件夹会发起传输，对方确认接收后可粘贴；还可拖进软件或屏幕边缘的投递口，在接收端从记录拖出。提供进度／速度、取消、重新发送、接收目录、同名保护和本机记录。游戏模式与暂停同时停止内容共享。
+
+[操作方式、容量限制与后续计划](docs/SHARING.md)。两端均需升级至 v0.3.0。文件拖放采用投递口交接，接收完成后拖入本机应用。
+
+![文件与剪贴板界面，任务为演示数据](docs/sharing.png)
+
 ## 范围与限制
 
 - 当前跨屏边界使用**主显示器**；本机仍可正常使用其他显示器，远端虚拟鼠标限制在目标主显示器。
 - 适用于已登录的交互桌面。锁屏、登录界面、UAC 安全桌面、macOS Secure Input 及更高权限的程序可能阻止捕获／注入。[Windows SendInput 权限说明](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)。
-- 剪贴板同步、跨机文件拖放、屏幕视频传输和 Windows ARM 原生包属于后续范围。
+- 连续跨屏的原生文件拖动、多显示器拓扑、断点续传、屏幕视频传输和 Windows ARM 原生包属于后续范围。
 - 自动发现依赖可达的局域网；同 Wi-Fi 下的「访客隔离」需要关闭或改用允许设备互通的网络。
 
 ## 数据与安全设计
 
-所有输入通过 TCP 上的 TLS 1.2+ 加密。每台设备首次启动生成独立 P-256 证书和私钥；双方先提交随机挑战的承诺，再交换证书／挑战并签名证明私钥所有权，生成六位核对码。用户在两端确认后保存证书 SHA-256 指纹。自动重连精确匹配身份；发现数据只用于寻找地址。
+输入、剪贴板及文件通过 TCP 上的 TLS 1.2+ 加密。每台设备首次启动生成独立 P-256 证书和私钥；双方先提交随机挑战的承诺，再交换证书／挑战并签名证明私钥所有权，生成六位核对码。用户在两端确认后保存证书 SHA-256 指纹。自动重连精确匹配身份；发现数据只用于寻找地址。
 
 首次配对安全依赖用户核对两端数字；拒绝陌生请求。协议是本项目实现，尚未接受独立安全审计，建议用于可信家庭或办公局域网。单个连接的输入帧大小、类型、数值和队列长度均有边界检查；所有权确认前不发送输入。
 
@@ -85,7 +93,7 @@ Windows 还自动检测前台全屏窗口及配置中的游戏进程，例如 `L
 | Windows | `%LOCALAPPDATA%\MouseShare` |
 | macOS | `~/Library/Application Support/MouseShare` |
 
-目录保存 `settings.json`、设备证书与私钥，应按敏感本机数据保护。macOS 使用用户私有目录／文件权限；Windows 使用当前用户目录的系统 ACL。卸载保留数据，方便重装；完全清除时先关闭登录启动、退出应用并删除该目录。Mac 登录项文件为 `~/Library/LaunchAgents/io.github.makesail.mouseshare.plist`。
+目录保存 `settings.json`、`transfers.json` 传输元数据、设备证书与私钥，应按敏感本机数据保护。macOS 使用用户私有目录／文件权限；Windows 使用当前用户目录的系统 ACL。卸载保留数据，方便重装；完全清除时先关闭登录启动、退出应用并删除该目录。Mac 登录项文件为 `~/Library/LaunchAgents/io.github.makesail.mouseshare.plist`。
 
 ## 开发与验证
 

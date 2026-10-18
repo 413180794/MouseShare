@@ -107,6 +107,9 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 12px; padding: 5px 0; }
 QCheckBox::indicator { width: 34px; height: 20px; }
+QProgressBar { border: 1px solid @LINE@; border-radius: 5px; background: @BG@;
+    min-height: 12px; max-height: 12px; text-align: center; font-size: 10px; }
+QProgressBar::chunk { background: @ACCENT_LINE@; border-radius: 4px; }
 QMenu { background: #ffffff; border: 1px solid @LINE@; border-radius: 8px; padding: 5px; }
 QMenu::item { padding: 8px 20px; border-radius: 5px; }
 QMenu::item:selected { background: @ACCENT_SOFT@; color: @ACCENT_INK@; }

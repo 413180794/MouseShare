@@ -137,3 +137,32 @@ def test_permission_entry_opens_reusable_guide_without_native_prompt(window, app
     assert window.permission_guide is guide
     guide.close()
     assert not guide.timer.isActive()
+
+
+def test_sharing_preferences_apply_without_touching_pairing_and_form(window, app):
+    panel = window.share_panel
+    saved = window.settings.get('peers')
+    panel.clipboard_enabled.setChecked(False)
+    panel.auto_receive.setChecked(True)
+    assert window.settings.get('clipboard_sync') is False
+    assert window.settings.get('auto_receive_files') is True
+    assert window.settings.get('peers') == saved
+    assert window.form_values() == window.saved_form
+    window.stack.setCurrentIndex(3)
+    window.resize(940, 720)
+    window.show()
+    app.processEvents()
+    assert panel.isVisible() and panel.directory.isReadOnly()
+
+
+def test_transfer_history_keeps_completed_metadata_and_clear_preserves_files(window, app, tmp_path):
+    path = tmp_path / 'received.txt'
+    path.write_text('keep me')
+    panel = window.share_panel
+    event = dict(type='transfer', job='example', direction='receive', title=path.name,
+                 status='complete', detail='校验通过', total=7, done=7, paths=[str(path)], clipboard=False)
+    panel.transfer(event)
+    assert panel.history_path.exists()
+    assert path.exists() and 'example' in panel.rows
+    panel.clear_history()
+    assert path.read_text() == 'keep me' and not panel.rows

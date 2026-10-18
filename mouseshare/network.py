@@ -108,7 +108,7 @@ class Discovery:
 
 
 class Session:
-    def __init__(self, owner, raw, server, expected_id=None):
+    def __init__(self, owner, raw, server, expected_id=None, lane="input", work=None):
         self.owner, self.raw, self.server, self.expected_id = owner, raw, server, expected_id
         self.peer_id, self.peer_name, self.code = "", "", ""
         self.approval = threading.Event()
@@ -117,6 +117,8 @@ class Session:
         self.outgoing = queue.Queue(maxsize=2048)
         self.sock = None
         self.connected = False
+        self.lane, self.work = lane, work
+        self.peer_features, self.peer_port = [], INPUT_PORT
 
     def approve(self, accepted):
         self.accepted = accepted
@@ -145,19 +147,31 @@ class Session:
 
     def authenticate(self):
         local = self.owner.identity.hello(self.owner.settings.get("name"))
+        local.update(features=["sharing-v1"], port=self.owner.port)
         # Commit before revealing either random nonce. This prevents a middleman
         # choosing its nonce after seeing the other side's SAS input.
         commitment = hashlib.sha256(frame(local)).hexdigest()
-        self.sock.sendall(frame({"type": "commit", "hash": commitment}))
+        self.sock.sendall(frame({"type": "commit", "hash": commitment, "lane": self.lane}))
         remote_commit = recv_frame(self.sock)
         if remote_commit.get("type") != "commit":
             raise ProtocolError("Missing pairing commitment")
+        remote_lane = remote_commit.get("lane", "input")
+        if remote_lane not in {"input", "data"}:
+            raise ProtocolError("Unknown channel")
+        if self.server:
+            self.lane = remote_lane
+        if self.lane == "input" and self.owner.session is not self:
+            raise ProtocolError("Input connection already active")
         self.sock.sendall(frame(local))
         remote = recv_frame(self.sock)
         if hashlib.sha256(frame(remote)).hexdigest() != remote_commit.get("hash"):
             raise ProtocolError("Pairing commitment mismatch")
         remote_der, remote_cert, remote_nonce = check_hello(remote)
         self.peer_id, self.peer_name = remote["id"], remote["name"]
+        self.peer_features = remote.get("features", []) if isinstance(remote.get("features"), list) else []
+        self.peer_port = remote.get("port", INPUT_PORT)
+        if type(self.peer_port) is not int or not 1 <= self.peer_port <= 65535:
+            raise ProtocolError("Invalid peer port")
         if self.peer_id == self.owner.identity.id:
             raise ProtocolError("Cannot connect to this device")
         if self.expected_id and self.peer_id != self.expected_id:
@@ -176,6 +190,11 @@ class Session:
         remote_cert.public_key().verify(unb64(signed.get("signature")), proof, ec.ECDSA(hashes.SHA256()))
         self.code = pairing_code(proof)
         trusted = self.peer_id in self.owner.settings.get("peers")
+        if self.lane == "data":
+            control = self.owner.session
+            if (not trusted or not control or not control.connected
+                    or control.peer_id != self.peer_id or "sharing-v1" not in control.peer_features):
+                raise ProtocolError("Data channel requires active paired connection")
         remote_confirmation = None
         if trusted:
             self.accepted = True
@@ -198,7 +217,8 @@ class Session:
         confirmation = remote_confirmation or recv_frame(self.sock)
         if confirmation.get("type") != "confirm" or confirmation.get("accepted") is not True or not self.accepted:
             raise ProtocolError("Pairing declined")
-        self.owner.settings.trust(self.peer_id, self.peer_name, self.sock.getpeername()[0])
+        if self.lane == "input":
+            self.owner.settings.trust(self.peer_id, self.peer_name, self.sock.getpeername()[0])
 
     def run(self):
         error = "连接已结束"
@@ -209,6 +229,12 @@ class Session:
             self.sock = context.wrap_socket(self.raw, server_side=self.server,
                                             server_hostname=None if self.server else "MouseShare")
             self.authenticate()
+            if self.lane == "data":
+                self.sock.settimeout(120)
+                self.connected = True
+                (self.work or self.owner.on_data)(self)
+                self.work_finished = True
+                return
             self.sock.settimeout(0.5)
             self.connected = True
             self.owner.on_connected(self)
@@ -250,7 +276,9 @@ class Session:
                 self.sock.close()
             else:
                 self.raw.close()
-            self.owner.finished(self, error)
+            if self.owner.session is self:
+                self.owner.finished(self, error)
+            self.owner.channel_finished(self)
 
 
 class Network:
@@ -265,6 +293,8 @@ class Network:
         self.session = None
         self.listener = None
         self.dialing = False
+        self.on_data = lambda session: None
+        self.channels = set()
 
     def start(self):
         # Bind synchronously so a firewall/port failure is visible before advertising.
@@ -291,12 +321,37 @@ class Network:
 
     def adopt(self, raw, server, expected_id=None):
         with self.lock:
-            if self.stopped.is_set() or self.session is not None:
+            if self.stopped.is_set() or len(self.channels) >= 4:
                 raw.close()
                 return
             session = Session(self, raw, server, expected_id)
-            self.session = session
+            self.channels.add(session)
+            if self.session is None:
+                self.session = session
         threading.Thread(target=session.run, daemon=True, name="TLS-session").start()
+
+    def data_connection(self, work):
+        """Run a bounded bulk channel on the same firewall port as the input lane."""
+        control = self.session
+        if not control or not control.connected or "sharing-v1" not in control.peer_features:
+            raise ConnectionError("两端均需升级至支持文件共享的版本")
+        raw = socket.create_connection((control.sock.getpeername()[0], control.peer_port), timeout=5)
+        channel = Session(self, raw, False, control.peer_id, lane="data", work=work)
+        with self.lock:
+            if self.stopped.is_set() or len(self.channels) >= 4:
+                raw.close()
+                raise ConnectionError("传输通道繁忙，请稍后重试")
+            self.channels.add(channel)
+        channel.run()
+        if not getattr(channel, "work_finished", False):
+            raise ConnectionError("传输连接已断开或对方拒绝请求")
+
+    def channel_finished(self, session):
+        with self.lock:
+            self.channels.discard(session)
+            channels = list(self.channels) if self.session is None else []
+        for channel in channels:
+            channel.stop()
 
     def connect(self, host, port=INPUT_PORT, expected_id=None):
         with self.lock:
@@ -323,8 +378,8 @@ class Network:
 
     def stop(self):
         self.stopped.set()
-        if self.session:
-            self.session.stop()
+        for channel in list(self.channels):
+            channel.stop()
         if self.listener:
             self.listener.close()
 

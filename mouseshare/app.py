@@ -26,6 +26,9 @@ from .input import create_backend
 from .network import Discovery, Network
 from .permissions import PermissionGuide
 from .security import Identity
+from .sharing import SharingService
+from .clipboard import ClipboardSync
+from .share_ui import EdgePortal, SharePanel
 
 
 class Bridge(QObject):
@@ -33,6 +36,7 @@ class Bridge(QObject):
     peer = Signal(dict)
     status = Signal(dict)
     error = Signal(str)
+    sharing = Signal(dict)
 
 
 
@@ -56,6 +60,8 @@ class MainWindow(QMainWindow):
                                lambda s, m: self.engine.enqueue({"type": "network", "session": s, "message": m}),
                                self.disconnected, self.bridge.error.emit)
         self.discovery = Discovery(identity, settings, self.bridge.peer.emit, self.bridge.error.emit)
+        self.sharing = SharingService(self.network, settings, self.sharing_allowed, self.bridge.sharing.emit)
+        self.bridge.sharing.connect(self.sharing_event)
         self.setWindowTitle(f"MouseShare · {__version__}")
         self.setWindowIcon(app_icon())
         self.resize(1060, 820)
@@ -63,6 +69,9 @@ class MainWindow(QMainWindow):
         self.build_ui()
         self.bind_settings_feedback()
         self.build_tray()
+        self.clipboard_sync = None if demo else ClipboardSync(
+            self.sharing, settings, self.share_panel.status.setText, self)
+        self.edge_portal = EdgePortal(self)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh_peers)
         self.timer.timeout.connect(self.save_diagnostics)
@@ -107,7 +116,7 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         self.stack.setObjectName("pages")
         for index, (label, icon) in enumerate([("设备连接", "devices"), ("共享设置", "settings"),
-                                                ("游戏模式", "game")]):
+                                                ("游戏模式", "game"), ("文件与剪贴板", "devices")]):
             button = QPushButton(label)
             button.setObjectName("nav")
             button.setIcon(line_icon(icon, INK_2, checked=ACCENT))
@@ -141,7 +150,31 @@ class MainWindow(QMainWindow):
         self.build_home()
         self.build_settings()
         self.build_game_page()
+        layout, _ = self.make_page("文件与剪贴板", "复制、拖放，把内容送到另一台电脑。")
+        self.share_panel = SharePanel(self)
+        layout.addWidget(self.share_panel)
+        layout.addStretch()
         self.stack.currentChanged.connect(lambda i: self.nav_group.button(i).setChecked(True))
+
+    def sharing_allowed(self, kind):
+        session = self.network.session
+        return bool(session and session.connected and "sharing-v1" in getattr(session, "peer_features", [])
+                    and not self.engine.game and not self.engine.paused and not self.engine.system_blocked)
+
+    def sharing_event(self, event):
+        if self.closed:
+            return
+        if event['type'] == 'transfer':
+            self.share_panel.transfer(event)
+        elif event['type'] == 'clipboard' and self.clipboard_sync:
+            if event.get('control') is self.network.session:
+                self.clipboard_sync.apply(event['payload'])
+        elif event['type'] == 'clipboard_status':
+            self.share_panel.status.setText(event['text'])
+
+    def show_sharing(self):
+        self.stack.setCurrentIndex(3)
+        self.show_normal()
 
     def make_page(self, title, subtitle):
         scroll = QScrollArea()
@@ -480,6 +513,10 @@ class MainWindow(QMainWindow):
         release = QAction("立即收回键鼠 · Ctrl+Alt+Esc", self)
         release.triggered.connect(lambda: self.engine.command("panic"))
         menu.addAction(release)
+        share = QAction("文件与剪贴板", self)
+        share.triggered.connect(self.show_sharing)
+        menu.addAction(share)
+        self.tray.messageClicked.connect(self.show_sharing)
         menu.addSeparator()
         quit_action = QAction("退出", self)
         quit_action.triggered.connect(QApplication.instance().quit)
@@ -498,6 +535,7 @@ class MainWindow(QMainWindow):
         self.notice_label.setText(text)
 
     def show_status(self, state):
+        previous_state = getattr(self, 'ui_state', {})
         self.ui_state = state
         need_permission = (not state["ready"] and sys.platform == "darwin" and
                            (self.demo or not all(self.backend.permission_status().values())))
@@ -551,6 +589,21 @@ class MainWindow(QMainWindow):
         self.update_map()
         self.update_actions()
         self.tray.setToolTip(f"MouseShare · {title}")
+        if state.get('game') or state.get('paused') or state.get('system_blocked') or not state['connected']:
+            self.sharing.pause()
+        if hasattr(self, 'share_panel'):
+            self.share_panel.drop.setEnabled(self.sharing_allowed('files') and self.settings.get('file_sharing', True))
+            session = self.network.session
+            if not state['connected']:
+                self.share_panel.status.setText('连接另一台电脑后即可共享文件与剪贴板')
+            elif session and 'sharing-v1' not in getattr(session, 'peer_features', []):
+                self.share_panel.status.setText('文件与剪贴板需要两端均升级至 v0.3.0 或更新版本')
+            elif state.get('game') or state.get('paused') or state.get('system_blocked'):
+                self.share_panel.status.setText('内容共享已暂停；退出游戏保护或恢复共享后重新复制／发送')
+            elif not previous_state.get('connected'):
+                self.share_panel.status.setText('内容共享已就绪，重新复制要同步的内容')
+                if getattr(self, 'clipboard_sync', None):
+                    self.clipboard_sync.poll()
 
     def found_peer(self, peer):
         if len(self.peers) < 64 or peer["id"] in self.peers:
@@ -773,6 +826,10 @@ class MainWindow(QMainWindow):
             return
         self.closed = True
         self.timer.stop()
+        self.sharing.stop()
+        if self.clipboard_sync:
+            self.clipboard_sync.stop()
+        self.edge_portal.close()
         if self.permission_guide:
             self.permission_guide.close()
         for dialog, session in list(self.dialogs.values()):

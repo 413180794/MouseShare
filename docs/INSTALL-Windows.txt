@@ -1,6 +1,6 @@
-MouseShare 0.2.5 — Windows 10/11 x64
+MouseShare 0.3.0 — Windows 10/11 x64
 
-1. Run MouseShare-0.2.5-Windows-x64-Setup.exe. The installer includes all runtime dependencies.
+1. Run MouseShare-0.3.0-Windows-x64-Setup.exe. The installer includes all runtime dependencies.
 2. Keep the recommended private-network firewall rules enabled. Set your trusted LAN to Private.
 3. Install MouseShare on the Mac, connect both computers to the same LAN, and start both apps.
 4. Select the other computer and click 配对并连接 (Pair and Connect). Compare the six-digit code on BOTH computers.

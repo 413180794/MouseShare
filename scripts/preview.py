@@ -39,10 +39,16 @@ def main():
         window.show_status(state)
         window.refresh_peers()
         window.show()
-        for i, name in enumerate(["connection", "settings", "game"]):
+        for i, name in enumerate(["connection", "settings", "game", "sharing"]):
             window.stack.setCurrentIndex(i)
             app.processEvents()
             window.grab().save(str(args.output / f"{name}.png"))
+        window.share_panel.transfer(dict(type='transfer', job='demo-file', direction='receive',
+                                        title='设计稿 / 项目资料', status='transferring',
+                                        detail='正在接收并校验', total=200 * 1024**2, done=84 * 1024**2,
+                                        paths=[], clipboard=False, speed=12 * 1024**2), persist=False)
+        app.processEvents()
+        window.grab().save(str(args.output / 'sharing-progress.png'))
         for name, changes in [("offline", dict(connected=False, peer_name="", peer_available=False)),
                               ("locked", dict(game=True, manual_game=True)),
                               ("permissions", dict(ready=False, error="请为 MouseShare 开启辅助功能和输入监控。"))]:
