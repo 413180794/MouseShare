@@ -1,6 +1,7 @@
 import json
 import os
 from types import SimpleNamespace
+from pathlib import Path
 
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 
@@ -42,7 +43,8 @@ def test_private_formats_and_file_urls(app, tmp_path):
     assert encode_clipboard(mime) == (None, [])
     raw = QMimeData()
     raw.setUrls([QUrl.fromLocalFile(str(tmp_path / 'file'))])
-    assert encode_clipboard(raw) == (None, [str(tmp_path / 'file')])
+    payload, paths = encode_clipboard(raw)
+    assert payload is None and [Path(p) for p in paths] == [tmp_path / 'file']
     assert encode_clipboard(files_mime([tmp_path / 'file'])) == (None, [])
 
 
@@ -78,7 +80,7 @@ def test_poll_only_new_copies_never_stale_or_received_contents(app, tmp_path):
         clipboard.mime = QMimeData()
         clipboard.mime.setUrls([QUrl.fromLocalFile(str(tmp_path / 'file'))])
         watcher.poll()
-        assert files == [[str(tmp_path / 'file')]]
+        assert [[Path(p) for p in batch] for batch in files] == [[tmp_path / 'file']]
         service.enabled = lambda kind: False
         watcher.poll()
         clipboard.mime = QMimeData()

@@ -62,7 +62,9 @@ def test_file_folder_and_empty_files_roundtrip_with_live_input(pair, tmp_path):
     assert (target / '截图.bin').read_bytes() == (folder / '截图.bin').read_bytes()
     assert (target / 'empty.txt').stat().st_size == 0
     assert (target / 'empty-folder').is_dir()
-    assert len(messages) == 20 and a.session.connected and b.session.connected
+    wait_for(lambda: len(messages) == 20)
+    assert [message['dx'] for message in messages] == list(range(20))
+    assert a.session.connected and b.session.connected
     assert receive.jobs[job].clipboard
     assert not list(target.parent.parent.glob('.mouseshare-*'))
     # Separate batches preserve identical filenames.
