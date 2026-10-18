@@ -29,7 +29,7 @@ def build_linux(root, dist, version):
     (control / 'control').write_text(
         f'Package: mouseshare\nVersion: {version}\nArchitecture: {deb_arch}\n'
         'Maintainer: MouseShare contributors <mouseshare@users.noreply.github.com>\n'
-        f'Installed-Size: {size}\nDepends: {DEPENDENCIES}\n'
+        f'Installed-Size: {size}\nDepends: {DEPENDENCIES.replace("2.35", "2.39") if deb_arch == "arm64" else DEPENDENCIES}\n'
         'Section: utils\nPriority: optional\nHomepage: https://github.com/413180794/MouseShare\n'
         'Description: Encrypted LAN keyboard, mouse, clipboard and file sharing\n'
         ' Keyboard and mouse sharing requires a logged-in X11 desktop.\n'

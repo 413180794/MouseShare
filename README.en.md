@@ -19,7 +19,7 @@ Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux 
 | Apple Silicon, macOS 13+ | `MouseShare-0.4.0-macOS-arm64.dmg` | Drag the app into Applications |
 | Intel, macOS 13+ | `MouseShare-0.4.0-macOS-x86_64.dmg` | Drag the app into Applications |
 | Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.4.0-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
-| Linux ARM64, same distributions | `MouseShare-0.4.0-Linux-arm64.deb` or `.tar.gz` | Same as above |
+| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.4.0-Linux-arm64.deb` or `.tar.gz` | Same as above |
 
 Packages include Python and Qt. Linux still requires X11/Qt system libraries; the DEB declares these dependencies. The portable archive includes a user-level `install.sh` that adds a menu entry and preserves older version directories. See [Linux instructions](docs/INSTALL-Linux.txt).
 

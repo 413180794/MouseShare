@@ -18,7 +18,7 @@ Windows / macOS / Linux（X11）局域网鼠标键盘、剪贴板和文件共享
 | Apple Silicon Mac，macOS 13+ | `MouseShare-0.4.0-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
 | Intel Mac，macOS 13+ | `MouseShare-0.4.0-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
 | Linux x64，Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.4.0-Linux-x64.deb` 或 `.tar.gz` | `sudo apt install ./文件名.deb`；便携包解压运行 |
-| Linux ARM64，同上 | `MouseShare-0.4.0-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
+| Linux ARM64，Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.4.0-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
 | Windows 便携版 | `MouseShare-0.4.0-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
