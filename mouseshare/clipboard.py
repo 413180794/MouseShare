@@ -30,6 +30,15 @@ def encode_clipboard(mime, images=True, include_remote=False):
         urls = mime.urls()
         if urls and all(url.isLocalFile() for url in urls):
             return None, [url.toLocalFile() for url in urls]
+    if mime.hasFormat('x-special/gnome-copied-files'):
+        data = bytes(mime.data('x-special/gnome-copied-files'))
+        if len(data) > 2 * 1024**2:
+            raise ValueError('文件剪贴板过大，请分批发送')
+        lines = data.decode('utf-8').splitlines()
+        if lines and lines[0] in {'copy', 'cut'}:
+            urls = [QUrl(line) for line in lines[1:] if line]
+            if urls and len(urls) <= 4096 and all(url.isLocalFile() for url in urls):
+                return None, [url.toLocalFile() for url in urls]
     value = {}
     if mime.hasText():
         value['text'] = mime.text()
@@ -85,6 +94,9 @@ def decode_clipboard(payload, images=True):
 def files_mime(paths, mark=True):
     mime = QMimeData()
     mime.setUrls([QUrl.fromLocalFile(str(path)) for path in paths])
+    encoded = [url.toString(QUrl.ComponentFormattingOption.FullyEncoded) for url in mime.urls()]
+    mime.setData('x-special/gnome-copied-files', ('copy\n' + '\n'.join(encoded)).encode('utf-8'))
+    mime.setData('application/x-kde-cutselection', b'0')
     # Explorer should copy, including when the source clipboard was a Cut.
     mime.setData('application/x-qt-windows-mime;value="Preferred DropEffect"', struct.pack('<I', 1))
     if mark:

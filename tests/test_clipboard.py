@@ -141,3 +141,15 @@ def test_wayland_foreground_manual_sync_and_pending_apply(app, tmp_path, monkeyp
         assert json.loads(sent[-1]) == {'text': 'remote'}
     finally:
         watcher.stop()
+
+
+def test_linux_gnome_file_clipboard_and_copy_semantics(app, tmp_path):
+    path = tmp_path / '中文 file.txt'
+    uri = QUrl.fromLocalFile(str(path)).toString(QUrl.ComponentFormattingOption.FullyEncoded)
+    mime = QMimeData()
+    mime.setData('x-special/gnome-copied-files', ('cut\n' + uri).encode())
+    payload, paths = encode_clipboard(mime)
+    assert payload is None and [Path(p) for p in paths] == [path]
+    result = files_mime([path])
+    assert bytes(result.data('x-special/gnome-copied-files')) == ('copy\n' + uri).encode()
+    assert bytes(result.data('application/x-kde-cutselection')) == b'0'
