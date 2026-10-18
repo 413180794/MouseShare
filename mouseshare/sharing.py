@@ -38,12 +38,13 @@ def safe_path(value):
     return path
 
 
-def manifest(paths):
+def manifest(paths, check=lambda: None):
     entries, sources, seen = [], {}, set()
     total = 0
 
     def add(source, relative):
         nonlocal total
+        check()
         safe_path(relative)
         key = unicodedata.normalize('NFC', relative).casefold()
         if key in seen or len(entries) >= MAX_ENTRIES:
@@ -190,7 +191,7 @@ class SharingService:
 
     def _send_files(self, job, paths):
         try:
-            entries, sources, job.total = manifest(paths)
+            entries, sources, job.total = manifest(paths, lambda: self.check(job))
             self.check(job)
             names = [e['path'] for e in entries if '/' not in e['path']]
             job.title = '、'.join(names)[:160]

@@ -219,6 +219,8 @@ class SharePanel(QWidget):
             box, body = card()
             title = text_label('', 'section', True)
             detail = text_label('', 'hint', True)
+            title.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+            detail.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             progress = QProgressBar()
             progress.setRange(0, 1000)
             buttons = QHBoxLayout()
@@ -237,6 +239,8 @@ class SharePanel(QWidget):
             detail.setText(detail.text() + f' · {size_text(speed)}/s · 剩余约 {eta} 秒')
         progress.setValue(int(event['done'] / max(1, event['total']) * 1000))
         progress.setVisible(event['status'] in {'preparing', 'waiting', 'offered', 'transferring'})
+        if previous and previous['status'] == event['status']:
+            return  # Keep native action buttons stable while progress updates arrive.
         while buttons.count():
             widget = buttons.takeAt(0).widget()
             if widget:

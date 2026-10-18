@@ -166,3 +166,22 @@ def test_transfer_history_keeps_completed_metadata_and_clear_preserves_files(win
     assert path.exists() and 'example' in panel.rows
     panel.clear_history()
     assert path.read_text() == 'keep me' and not panel.rows
+
+
+def test_progress_updates_keep_cancel_target_and_fit_minimum_window(window, app):
+    panel = window.share_panel
+    window.stack.setCurrentIndex(3)
+    window.resize(940, 720)
+    event = dict(type='transfer', job='busy', direction='send', title='long-name-' * 20,
+                 status='transferring', detail='传输中', total=1000, done=1, paths=[], clipboard=False)
+    panel.transfer(event)
+    window.show()
+    app.processEvents()
+    row = panel.rows['busy']
+    cancel = row[4].itemAt(0).widget()
+    for amount in range(100, 900, 100):
+        panel.transfer({**event, 'done': amount})
+        app.processEvents()
+        assert row[4].itemAt(0).widget() is cancel
+    assert panel.width() <= window.stack.width()
+    assert panel.files_enabled.height() >= panel.files_enabled.minimumSizeHint().height()
