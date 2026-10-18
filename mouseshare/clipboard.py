@@ -131,6 +131,11 @@ class ClipboardSync(QObject):
             if self.active and sequence is not None and sequence == self.last_sequence:
                 return
             self.last_sequence = sequence
+            if sys.platform == 'darwin' and self.clipboard is QApplication.clipboard():
+                from AppKit import NSPasteboard
+                if PRIVATE.intersection(str(kind) for kind in NSPasteboard.generalPasteboard().types()):
+                    self.active = True
+                    return
             payload, paths = encode_clipboard(self.clipboard.mimeData(), self.settings.get('clipboard_images', True))
             fingerprint = hashlib.sha256(payload or json.dumps(paths, ensure_ascii=False).encode()).hexdigest()
             if not self.active:

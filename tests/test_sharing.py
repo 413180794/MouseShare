@@ -184,3 +184,14 @@ def test_data_connection_cannot_pair_a_new_device(pair, tmp_path):
     finally:
         service.stop()
         outsider.stop()
+
+
+def test_manifest_unicode_alias_and_preparation_cancel(tmp_path):
+    with pytest.raises(ValueError):
+        validate_manifest([dict(path='é', size=0, directory=False), dict(path='e\u0301', size=0, directory=False)], 0)
+    source = tmp_path / 'file'
+    source.touch()
+    def cancelled():
+        raise InterruptedError('cancelled')
+    with pytest.raises(InterruptedError):
+        manifest([source], cancelled)

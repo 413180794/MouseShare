@@ -23,6 +23,10 @@ RESERVED = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)),
             *(f"LPT{i}" for i in range(1, 10))}
 
 
+def is_link(path):
+    return path.is_symlink() or getattr(path, 'is_junction', lambda: False)()
+
+
 def safe_path(value):
     if not isinstance(value, str) or not 1 <= len(value.encode('utf-8')) <= 1024:
         raise ProtocolError("文件路径过长")
@@ -51,7 +55,7 @@ def manifest(paths, check=lambda: None):
             raise ValueError("文件名大小写冲突、重复或文件数量超过 4096")
         seen.add(key)
         info = source.lstat()
-        if stat.S_ISLNK(info.st_mode) or not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
+        if is_link(source) or not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
             raise ValueError("请传输普通文件或文件夹；链接与特殊文件需先整理")
         size = info.st_size if stat.S_ISREG(info.st_mode) else 0
         total += size
@@ -66,7 +70,7 @@ def manifest(paths, check=lambda: None):
     for raw in paths:
         path = Path(raw).absolute()
         # Parent links can change what a displayed path points at.
-        if any(p.is_symlink() for p in [path, *path.parents]):
+        if any(is_link(p) for p in [path, *path.parents]):
             raise ValueError("请选取原始文件，避免通过符号链接发送")
         add(path, path.name)
     if not entries:
@@ -216,7 +220,7 @@ class SharingService:
                         continue
                     source, size, modified = sources[entry['path']]
                     self.check(job)
-                    if any(p.is_symlink() for p in [source, *source.parents]):
+                    if any(is_link(p) for p in [source, *source.parents]):
                         raise OSError("源文件变成了链接，请重新发送")
                     fd = os.open(source, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0))
                     with os.fdopen(fd, 'rb') as stream:
@@ -321,8 +325,11 @@ class SharingService:
             entries = []
             for _ in range(count):
                 entry = recv_frame(sock)
-                if entry.get('type') != 'entry':
+                if entry.get('type') != 'entry' or set(entry) != {'type', 'path', 'size', 'directory'}:
                     raise ProtocolError("Missing file entry")
+                safe_path(entry.get('path'))
+                if type(entry.get('size')) is not int or type(entry.get('directory')) is not bool:
+                    raise ProtocolError("Invalid file entry")
                 entries.append(entry)
             validate_manifest(entries, header.get('total'))
             names = [e['path'] for e in entries if '/' not in e['path']]
