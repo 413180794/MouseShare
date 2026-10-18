@@ -1,0 +1,69 @@
+name: Publish verified packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Build and test run containing the exact packages
+        required: true
+        type: string
+      source:
+        description: Full binary source commit SHA
+        required: true
+        type: string
+      tag:
+        description: Existing draft release tag
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: verified-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RUN_ID: ${{ inputs.run_id }}
+      SOURCE: ${{ inputs.source }}
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Verify source and collect the original CI artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh api "repos/$GH_REPO/actions/runs/$RUN_ID" > run.json
+          python - <<'PY'
+          import json, os
+          r = json.load(open('run.json'))
+          assert r['status'] == 'completed' and r['conclusion'] == 'success'
+          assert r['head_sha'] == os.environ['SOURCE']
+          assert r['repository']['full_name'] == os.environ['GH_REPO']
+          assert r['path'] == '.github/workflows/build.yml'
+          PY
+          gh release view "$TAG" --json isDraft --jq .isDraft | grep -x true
+          gh run download "$RUN_ID" --dir downloaded
+          mkdir packages
+          find downloaded -type f -exec cp -n {} packages/ \;
+          test "$(find packages -maxdepth 1 -type f | wc -l)" -eq 8
+          export LC_ALL=C
+          cd packages
+          sha256sum -- * > SHA256SUMS.txt
+      - name: Upload to the draft, verify every server digest, then publish
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" packages/* --clobber
+          python scripts/verify_release.py "$TAG" packages --repo "$GH_REPO" \
+            --source "$SOURCE" --run-id "$RUN_ID" --publish
