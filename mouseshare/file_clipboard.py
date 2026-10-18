@@ -124,8 +124,7 @@ class FileClipboard(QObject):
         values = [offer for key, offer in self.offers.items()
                   if self.window.network.peer_session(key) is offer['session']
                   and (not native or offer['eligible'] and offer['sequence'] == self.sync.sequence())]
-        selected = peer_id(self.engine.session)
-        return max(values, key=lambda o: (peer_id(o['session']) == selected, o['stamp']), default=None)
+        return max(values, key=lambda o: o['stamp'], default=None)
 
     def context(self):
         return self.engine.state, self.engine.flow, peer_id(self.engine.session)

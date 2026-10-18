@@ -122,3 +122,17 @@ def test_shared_hotkey_does_not_drop_capture_and_paste_shortcut_uses_platform_mo
     backend.copy_modifier = {227, 231}
     backend.clipboard_shortcut('paste')
     assert not backend.injected_keys and backend.captured
+
+
+def test_three_computer_paste_uses_latest_offer_even_when_controller_is_an_older_source(hub):
+    control, peer, calls, messages, sequence, *_ = hub
+    offer(hub)
+    newer = SimpleNamespace(peer_id='c'*64, connected=True, peer_name='Third computer',
+                            peer_features=peer.peer_features, send=lambda m: messages.append(m) or True)
+    control.window.network.sessions[newer.peer_id] = newer
+    control.window.network.peer_session = control.window.network.sessions.get
+    control.receive(newer, dict(type='file_offer', offer='c'*32, names=['newer.txt'], count=1))
+    assert control.engine.session is peer
+    control.action('paste')
+    request = next(m for m in reversed(messages) if m['type'] == 'file_request')
+    assert request['offer'] == 'c'*32
