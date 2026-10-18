@@ -25,6 +25,15 @@ Packages include Python and Qt. Linux still requires X11/Qt system libraries; th
 
 Releases currently have no commercial code signing or Apple notarization. Verify the source and `SHA256SUMS.txt`. Use `Get-FileHash -Algorithm SHA256` on Windows or `shasum -a 256` on macOS. Windows SmartScreen may show an unknown publisher; macOS may require Open Anyway in System Settings → Privacy & Security. Keep system security features enabled.
 
+For portable Linux builds on minimal desktops, install the following Qt/X11 runtime libraries. The DEB resolves its complete dependency list automatically:
+
+```bash
+sudo apt install libx11-6 libxi6 libxtst6 libxrandr2 libxss1 \
+  libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+  libxcb-keysyms1 libxcb-shape0 libxcb-render-util0 libxcb-xinerama0 \
+  libegl1 libopengl0 libdbus-1-3
+```
+
 ### macOS permissions
 
 The first launch opens a guide when permissions are missing. Open it later from **系统权限** (System Permissions). Each step requests its corresponding native permission, opens the correct settings page, and checks the status when you return:

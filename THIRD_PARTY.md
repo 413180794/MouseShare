@@ -3,7 +3,7 @@ Installers include a `licenses` directory with dependency metadata and license t
 
 * PySide6 Essentials / Qt 6.10.3: LGPLv3 (applicable Qt modules) / GPL / commercial options.
   MouseShare uses the LGPL distribution, dynamically linked. You may replace the Qt/PySide6
-  libraries in the application bundle (`_internal` on Windows, `Contents/Frameworks` on macOS).
+  libraries in the application bundle (`_internal` on Windows/Linux, `Contents/Frameworks` on macOS).
   Rebuilding this MIT application is permitted; reverse engineering for debugging modifications
   to LGPL components is permitted under their license. A modified macOS bundle requires ad-hoc
   re-signing with `codesign --force --deep --sign - MouseShare.app`.

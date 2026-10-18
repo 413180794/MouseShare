@@ -37,6 +37,15 @@ macOS 首次运行缺少权限时，会显示设置向导；也可点击首页�
 
 Linux 完整键鼠共享使用 **X11／Xorg** 会话，以当前登录桌面的普通用户运行。Wayland 提供文件传输与前台手动剪贴板操作；完整键鼠共享请注销后在登录会话中选择 X11／Xorg。Linux 无需 root、input 组或放宽 X11 访问控制。系统依赖、便携安装与开机启动见 [Linux 安装说明](docs/INSTALL-Linux.txt)。
 
+Linux 便携包在精简桌面缺少 Qt／X11 依赖时，可安装以下系统库；DEB 会自动解析完整依赖：
+
+```bash
+sudo apt install libx11-6 libxi6 libxtst6 libxrandr2 libxss1 \
+  libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 libxcb-image0 \
+  libxcb-keysyms1 libxcb-shape0 libxcb-render-util0 libxcb-xinerama0 \
+  libegl1 libopengl0 libdbus-1-3
+```
+
 ## 两台电脑首次连接
 
 1. 两台电脑加入同一可信局域网，并分别启动 MouseShare。
