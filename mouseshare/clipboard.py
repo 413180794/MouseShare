@@ -133,7 +133,7 @@ class ClipboardSync(QObject):
             self.last_sequence = sequence
             if sys.platform == 'darwin' and self.clipboard is QApplication.clipboard():
                 from AppKit import NSPasteboard
-                if PRIVATE.intersection(str(kind) for kind in NSPasteboard.generalPasteboard().types()):
+                if PRIVATE.intersection(str(kind) for kind in (NSPasteboard.generalPasteboard().types() or ())):
                     self.active = True
                     return
             payload, paths = encode_clipboard(self.clipboard.mimeData(), self.settings.get('clipboard_images', True))

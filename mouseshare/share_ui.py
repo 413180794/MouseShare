@@ -101,7 +101,7 @@ class SharePanel(QWidget):
         self.empty = text_label('还没有传输记录。', 'hint')
         layout.addWidget(self.empty)
         box, body = card('剪贴板', '在一台电脑复制，在另一台电脑粘贴。')
-        self.clipboard_enabled = QCheckBox('同步文字和富文本')
+        self.clipboard_enabled = QCheckBox('开启剪贴板共享（文字与富文本）')
         self.clipboard_images = QCheckBox('同步截图和图片')
         self.clipboard_files = QCheckBox('复制文件时发起传输，接收后可粘贴')
         for checkbox, key in [(self.clipboard_enabled, 'clipboard_sync'), (self.clipboard_images, 'clipboard_images'),
@@ -109,6 +109,8 @@ class SharePanel(QWidget):
             checkbox.setChecked(window.settings.get(key, True))
             checkbox.toggled.connect(lambda value, k=key: self.preference(k, value))
             body.addWidget(checkbox)
+        self.clipboard_images.setEnabled(self.clipboard_enabled.isChecked())
+        self.clipboard_files.setEnabled(self.clipboard_enabled.isChecked())
         layout.addWidget(box)
         box, body = card('文件传输', '文件与文件夹均以副本发送，接收后校验完整性。')
         self.files_enabled = QCheckBox('开启文件共享')
@@ -162,6 +164,9 @@ class SharePanel(QWidget):
             self.service.cancel_files()
         if key == 'clipboard_sync' and not value:
             self.service.cancel_clipboard()
+        if key == 'clipboard_sync':
+            self.clipboard_images.setEnabled(value)
+            self.clipboard_files.setEnabled(value)
         self.status.setText('共享偏好已保存')
         self.drop.setEnabled(self.window.sharing_allowed('files') and self.window.settings.get('file_sharing', True))
 
