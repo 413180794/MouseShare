@@ -148,22 +148,22 @@ def test_native_keyboard_grab_suppresses_focus_and_injection_has_no_echo():
             return repr(dict(expected_focus=window, actual_focus=backend.focus_token(),
                              pending=x.XPending(display), ready=backend.ready(), error=backend.error))
         wait_for(lambda: backend.focus_token() == window, diagnostic)
+        def next_key_type():
+            wait_for(lambda: x.XPending(display) > 0, diagnostic)
+            event = Event()
+            x.XNextEvent(display, C.byref(event))
+            return event.cookie.type
         backend.key(4, True)
-        # Observe down before releasing: XTEST input is queued separately from
-        # Xlib requests, so XFlush alone is not an input-delivery barrier.
+        # XPending doesn't read the socket while its local queue is nonempty.
+        # Consume down before waiting for up; waiting for a count of 2 can stall.
+        # https://www.x.org/releases/X11R7.6/doc/libX11/specs/libX11/libX11.html#Event_Queue_Management
         with backend.lock:
             backend.api.x.XSync(backend.display, False)
-        wait_for(lambda: x.XPending(display) >= 1, diagnostic)
+        assert next_key_type() == 2
         backend.key(4, False)
         with backend.lock:
             backend.api.x.XSync(backend.display, False)
-        wait_for(lambda: x.XPending(display) >= 2, diagnostic)
-        types = []
-        while x.XPending(display):
-            event = Event()
-            x.XNextEvent(display, C.byref(event))
-            types.append(event.cookie.type)
-        assert 2 in types and 3 in types
+        assert next_key_type() == 3
         backend.capture(True)
         backend.key(5, True)
         backend.key(5, False)
