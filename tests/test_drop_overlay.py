@@ -288,3 +288,5 @@ def test_secondary_monitor_drop_sensor_only_on_outer_connected_edge():
     routes = edge_regions(layout, a, QRect(0, 0, 1920, 1080), peers, desktop_bounds=desktop)
     assert len(routes) == 1 and routes[0][0:2] == (b, 'right')
     assert routes[0][2].right() == 1919
+    assert not edge_regions({}, a, QRect(-1920, 0, 1920, 1080), peers, selected=b, desktop_bounds=desktop)
+    assert edge_regions({}, a, QRect(0, 0, 1920, 1080), peers, selected=b, desktop_bounds=desktop)

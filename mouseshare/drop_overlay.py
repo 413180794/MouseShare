@@ -31,6 +31,11 @@ def edge_regions(layout, local_id, bounds, peers, legacy_side='right', selected=
     if local_id not in nodes:
         peers = {selected: peers[selected]} if selected in peers else {}
         nodes = {}
+    if not nodes and desktop_bounds is not None:
+        edge = lambda rect: {'left': rect.left(), 'right': rect.right(),
+                             'top': rect.top(), 'bottom': rect.bottom()}[legacy_side]
+        if edge(bounds) != edge(desktop_bounds):
+            return []
     a = Rect.parse(nodes[local_id]) if nodes else None
     if a and desktop_bounds is not None:
         d = desktop_bounds
