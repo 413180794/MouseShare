@@ -58,6 +58,8 @@ class Engine:
         self.last_screen = None
         self.last_tick = self.clock()
         self.handoff_attempts = self.handoff_timeouts = 0
+        self.handoff_durations = collections.deque(maxlen=64)
+        self.pending_moves_discarded = 0
         self.health_transitions = collections.deque(maxlen=32)
         self.events = collections.deque()
         self.condition = threading.Condition()
@@ -326,6 +328,7 @@ class Engine:
                     message[axis] = max(-limit, min(limit, message[axis]))
             if self.state == 'pending':
                 if kind == 'move':
+                    self.pending_moves_discarded += 1
                     return
                 if len(self.pending_events) >= 256:
                     self.release(True)
@@ -441,6 +444,7 @@ class Engine:
                     physical_keys=len(self.backend.keys), physical_buttons=len(self.backend.buttons),
                     injected_keys=len(self.backend.injected_keys), injected_buttons=len(self.backend.injected_buttons),
                     attempts=self.handoff_attempts, timeouts=self.handoff_timeouts,
+                    handoff_ms=list(self.handoff_durations), pending_moves_discarded=self.pending_moves_discarded,
                     recovered_releases=self.backend.recovered_releases,
                     tap_interruptions=getattr(self.backend, 'tap_interruptions', 0))
 
@@ -524,6 +528,7 @@ class Engine:
             self.auxiliary(dict(type='clipboard_action', action=message['action'], session=session, flow=self.flow))
         elif kind == 'entered':
             if self.state == 'pending' and self.available:
+                self.handoff_durations.append(round(max(0, self.clock()-self.pending_since)*1000, 3))
                 self.state = 'sending'
                 buffered, self.pending_events = self.pending_events, []
                 for event in buffered:

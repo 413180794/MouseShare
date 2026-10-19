@@ -1,5 +1,6 @@
 import threading
 import time
+import socket
 
 from mouseshare.config import Settings
 from mouseshare.network import Network
@@ -41,6 +42,9 @@ def test_real_tls_pair_input_reconnect_and_pin(tmp_path):
         assert b.identity.id in a.settings.get("peers")
         assert a.identity.id in b.settings.get("peers")
         assert ac[0].sock.cipher()[0]
+        for wake in (ac[0].wake_read, ac[0].wake_write):
+            if wake.family in {socket.AF_INET, socket.AF_INET6}:
+                assert wake.getsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY) == 1
         ac[0].send({"type": "key", "key": 4, "down": True})
         wait_for(lambda: bm)
         assert bm == [{"type": "key", "key": 4, "down": True}]
@@ -122,3 +126,29 @@ def test_concurrent_settings_updates_preserve_all_peers(tmp_path):
         thread.join()
     assert len(Settings(tmp_path).get("peers")) == 20
 
+
+
+def test_outgoing_input_wakes_a_blocked_tls_selector(monkeypatch, tmp_path):
+    import mouseshare.network as native
+    original = native.select.select
+    a, _, ac, _, _ = make_network(tmp_path/'a')
+    b, _, bc, messages, _ = make_network(tmp_path/'b')
+    blocked = threading.Event()
+    try:
+        a.connect('127.0.0.1', b.port, b.identity.id)
+        wait_for(lambda: ac and bc)
+        session = ac[0]
+        def select(readers, writers, errors, timeout=None):
+            if session.sock in readers and not original(readers, writers, errors, 0)[0]:
+                blocked.set()
+                return original(readers, writers, errors, 2)
+            return original(readers, writers, errors, timeout)
+        monkeypatch.setattr(native.select, 'select', select)
+        assert blocked.wait(2)
+        assert session.send(dict(type='move', dx=12, dy=0))
+        wait_for(lambda: messages, timeout=.5)
+        assert messages == [dict(type='move', dx=12, dy=0)]
+    finally:
+        a.stop()
+        b.stop()
+    wait_for(lambda: ac and ac[0].wake_read.fileno() == -1 and ac[0].wake_write.fileno() == -1)

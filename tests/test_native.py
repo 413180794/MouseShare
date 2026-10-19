@@ -416,3 +416,42 @@ def test_mac_recovers_missed_releases_and_preserves_actual_held_input(monkeypatc
     assert events == [dict(type='button', button=1, down=False)]
     backend.reconcile_physical()
     assert backend.keys == {225} and backend.buttons == {2} and backend.recovered_releases == 2
+
+
+def test_windows_shield_reuses_hidden_surfaces_and_rebuilds_for_display_changes(monkeypatch):
+    from types import SimpleNamespace
+    from PySide6.QtCore import QRect
+    from PySide6.QtWidgets import QApplication
+    import mouseshare.input.windows_cursor as shield
+    app = QApplication.instance() or QApplication([])
+    screens = [QRect(0, 0, 1920, 1080)]
+    created = []
+    class Panel:
+        def __init__(self, rect):
+            self.visible = self.closed = self.deleted = False
+            created.append(self)
+        def show(self):
+            self.visible = True
+        def hide(self):
+            self.visible = False
+        def close(self):
+            self.closed = True
+        def deleteLater(self):
+            self.deleted = True
+    monkeypatch.setattr(shield, 'Surface', Panel)
+    monkeypatch.setattr(shield.QApplication, 'screens', staticmethod(lambda: [
+        SimpleNamespace(geometry=lambda r=r: r) for r in screens]))
+    monkeypatch.setattr(shield.sys, 'platform', 'fixture')
+    surface = shield.WindowsCursorShield()
+    for _ in range(100):
+        surface.set_enabled(True)
+        assert surface.panels == created and all(p.visible for p in surface.panels)
+        surface.set_enabled(False)
+        assert not surface.panels and not surface.timer.isActive() and not created[0].visible
+    assert len(created) == 1 and not created[0].closed
+    screens.append(QRect(-1280, 0, 1280, 1024))
+    surface.set_enabled(True)
+    assert created[0].closed and created[0].deleted and len(surface.panels) == 2
+    surface.set_enabled(False)
+    assert not surface.panels and not surface.timer.isActive()
+    app.processEvents()

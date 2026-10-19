@@ -131,6 +131,7 @@ class Session:
         self.lane, self.work = lane, work
         self.peer_features, self.peer_port = [], INPUT_PORT
         self.peer_screen, self.control_session = {}, None
+        self.wake_read = self.wake_write = None
 
     def approve(self, accepted):
         self.accepted = accepted
@@ -143,6 +144,11 @@ class Session:
             return False
         try:
             self.outgoing.put_nowait(message)
+            if self.wake_write:
+                try:
+                    self.wake_write.send(b'\0')
+                except (BlockingIOError, OSError):
+                    pass  # A full wakeup socket already makes the selector ready.
             return True
         except queue.Full:
             self.stop()
@@ -253,6 +259,12 @@ class Session:
                 self.work_finished = True
                 return
             self.sock.settimeout(0.5)
+            self.wake_read, self.wake_write = socket.socketpair()
+            for wake in (self.wake_read, self.wake_write):
+                if wake.family in {socket.AF_INET, socket.AF_INET6}:
+                    wake.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+            self.wake_read.setblocking(False)
+            self.wake_write.setblocking(False)
             self.connected = True
             self.owner.on_connected(self)
             parser = Decoder()
@@ -270,8 +282,16 @@ class Session:
                     except queue.Empty:
                         break
                     self.sock.sendall(frame(message))
-                if not self.sock.pending() and not select.select([self.sock], [], [], 0.008)[0]:
-                    continue
+                if not self.sock.pending():
+                    ready = select.select([self.sock, self.wake_read], [], [],
+                                          0 if not self.outgoing.empty() else 0.05)[0]
+                    if self.wake_read in ready:
+                        try:
+                            self.wake_read.recv(4096)
+                        except BlockingIOError:
+                            pass
+                    if self.sock not in ready:
+                        continue
                 raw = self.sock.recv(32768)
                 if not raw:
                     raise ConnectionError("Peer disconnected")
@@ -289,6 +309,9 @@ class Session:
         finally:
             self.connected = False
             self.stopped.set()
+            for wake in (self.wake_read, self.wake_write):
+                if wake:
+                    wake.close()
             if self.sock:
                 self.sock.close()
             else:

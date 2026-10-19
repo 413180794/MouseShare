@@ -33,6 +33,8 @@ class WindowsCursorShield(QObject):
     def __init__(self):
         super().__init__()
         self.panels = []
+        self.retained = []
+        self.geometry_key = None
         self.detail = ''
         self.show_requested.connect(self.show, Qt.ConnectionType.QueuedConnection)
         self.hide_requested.connect(self.hide, Qt.ConnectionType.QueuedConnection)
@@ -61,10 +63,17 @@ class WindowsCursorShield(QObject):
             if request and request['cancelled']:
                 return
             if not self.panels:
-                for screen in QApplication.screens():
-                    panel = Surface(screen.geometry())
+                geometry = [screen.geometry() for screen in QApplication.screens()]
+                key = [(r.x(), r.y(), r.width(), r.height()) for r in geometry]
+                if key != self.geometry_key:
+                    for panel in self.retained:
+                        panel.close()
+                        panel.deleteLater()
+                    self.retained = [Surface(rect) for rect in geometry]
+                    self.geometry_key = key
+                self.panels = list(self.retained)
+                for panel in self.panels:
                     panel.show()
-                    self.panels.append(panel)
             self.enforce()
             self.timer.start()
         except Exception as exc:
@@ -95,8 +104,8 @@ class WindowsCursorShield(QObject):
         self.timer.stop()
         for panel in self.panels:
             panel.hide()
-            panel.close()
-            panel.deleteLater()
+        # Reuse hidden native windows on fast re-entry. Recreating them for every
+        # crossing makes capture wait for GUI/window-manager allocation again.
         self.panels.clear()
         if visible and sys.platform == 'win32':
             from ctypes import wintypes as W

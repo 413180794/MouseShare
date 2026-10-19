@@ -1,12 +1,12 @@
-MouseShare v0.7.3 · 碰边立即跨屏 / Instant edge switching
+MouseShare v0.7.4 · 优化连续快速往返 / Faster repeated handoffs
 
-- 移除源端停留计时、返回等待与交接后的定时冷却；鼠标朝相接边缘向外移动时立即发起交接，键盘随之切换。
-- 取消必须先向屏幕内回退的门槛。已读取现场：Mac 的 move-inward 条件阻挡切换，Windows 的 edge-dwell 状态反复被中断；两端没有交接超时。
-- 防回弹改用移动方向、控制权世代标记和重复路由去重：丢弃交接前积压的旧移动，保留真实新输入和按住键／鼠标保护。
-- 删除边缘停留设置，中英文界面和安装说明同步更新。已有 dwell_ms 设置保留为兼容数据，执行时忽略。
+- TLS 输入通道改为发送队列有消息立即唤醒网络线程，消除原先等待 8ms 轮询的开销；TLS 仍由单一线程读写。
+- Windows 光标隐藏窗口在返回后隐藏并复用，避免每次跨屏重建；显示器布局变化时重建，空闲时停止计时器。
+- 本机可选诊断增加最近 64 次交接确认耗时和待确认期间丢弃移动的数量，不记录键值、指针轨迹或对端标识。
+- 保留碰边立即切换、返回位置、旧移动过滤、游戏／按住键保护与剪贴板安全规则。
 
-Removes source dwell, return delay and timed cooldown. An outward move at a connected edge starts handoff immediately in both directions. The mandatory move-inward gate is also removed.
+The TLS input queue now wakes its I/O thread immediately instead of waiting for the polling interval. A single thread still owns TLS reads and writes. Windows reuses hidden cursor surfaces across handoffs and rebuilds them when display geometry changes. Idle surfaces stop their timer.
 
-Bounce prevention uses movement direction, ownership epochs and edge-route deduplication. Motion queued before ownership changes is discarded. Fresh physical input, held-key/button protection, game mode and explicit reclaim remain supported. The edge-delay setting is removed and bilingual instructions are updated. Legacy dwell_ms preferences are retained as inert compatibility data.
+Optional local diagnostics include the latest 64 handoff-confirmation durations and the count of motion packets discarded while waiting for confirmation. Key values, pointer paths and peer identifiers are excluded. Instant edge switching and existing ownership, game, held-input and clipboard protections remain in place.
 
-Preview packages: Windows x64 Setup/portable ZIP, macOS arm64/Intel DMGs, Linux x64/ARM64 DEB/portable archives. Linux input requires X11. Physical repeated handoff acceptance remains separate from automated tests. No commercial code signature or Apple notarization. Verify SHA256SUMS.txt.
+Preview packages: Windows x64 Setup/portable ZIP, macOS arm64/Intel DMGs, Linux x64/ARM64 DEB/portable archives. Linux input requires X11. Automated native handoff probes use simulated motion deltas through the real backend/TLS path; physical mouse feel remains a separate acceptance step. No commercial code signature or Apple notarization. Verify SHA256SUMS.txt.
