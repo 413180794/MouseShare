@@ -42,6 +42,6 @@
 
 在「文件与剪贴板」开启预先接收，可在完整接收并校验后使用系统右键「粘贴」。每次最多 64 MiB，期间本机有新复制内容则保留本机内容；更大文件用共享粘贴键按需传输。预接收默认关闭。原四键快捷键继续兼容，AltGr 输入保留。
 
-右键扩展也是可选项：Windows 11 在「显示更多选项」里选择「接收文件到此处（MouseShare）」；Ubuntu GNOME 安装 `sudo apt install python3-nautilus`，重新打开 Files 后使用。扩展只接受本机现有目录，文件收到该目录的独立批次文件夹，原有文件保持。关闭选项会移除扩展；Linux 卸载前请先关闭。其他文件管理器和 Finder 暂无此菜单入口，可使用三键或系统粘贴。
+右键扩展也是可选项：Windows 11 在「显示更多选项」里选择「接收文件到此处（MouseShare）」；Ubuntu GNOME 安装 `sudo apt install python3-nautilus`，关闭文件窗口后运行 `nautilus -q` 退出 Files，再重新打开后使用。扩展只接受本机现有目录，文件收到该目录的独立批次文件夹，原有文件保持。关闭选项会移除扩展；Linux 卸载前请先关闭。其他文件管理器和 Finder 暂无此菜单入口，可使用三键或系统粘贴。
 
 键盘主动切换为 Ctrl+Alt+Space（Mac Control+Option+Space），再次按下收回。接收端的物理输入仍会收回本机控制。
