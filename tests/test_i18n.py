@@ -3,6 +3,7 @@ import ast
 import json
 import os
 import re
+import sys
 from pathlib import Path
 from string import Formatter
 from types import SimpleNamespace
@@ -13,6 +14,7 @@ import pytest
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QLabel, QLineEdit
 
+import mouseshare.i18n as i18n
 from mouseshare.app import Bridge, MainWindow
 from mouseshare.config import Settings
 from mouseshare.i18n import Message, exception_text, language, resolve_language, set_language, tr
@@ -32,6 +34,21 @@ HAN = re.compile('[\u3400-\u9fff]')
 ])
 def test_locale_resolution(preference, system, expected):
     assert resolve_language(preference, system) == expected
+
+
+def test_mac_display_language_wins_over_launcher_locale(monkeypatch):
+    monkeypatch.setattr(i18n, 'sys', SimpleNamespace(platform='darwin'))
+    monkeypatch.setitem(sys.modules, 'Foundation', SimpleNamespace(
+        NSLocale=SimpleNamespace(preferredLanguages=lambda: ['zh-Hans-CN', 'en-US'])))
+    assert resolve_language('system') == 'zh_CN'
+    assert resolve_language('en') == 'en'
+
+
+def test_windows_display_language_wins_over_regional_locale(monkeypatch):
+    monkeypatch.setattr(i18n, 'sys', SimpleNamespace(platform='win32'))
+    monkeypatch.setitem(sys.modules, 'ctypes', SimpleNamespace(windll=SimpleNamespace(
+        kernel32=SimpleNamespace(GetUserDefaultUILanguage=lambda: 0x0804))))
+    assert resolve_language('system') == 'zh_CN'
 
 
 def test_catalog_is_complete_and_placeholders_match():

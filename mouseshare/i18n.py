@@ -1,5 +1,6 @@
 """App-owned messages and locale selection. User content never enters the catalog."""
 import json
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QLocale
@@ -9,10 +10,27 @@ _language = 'zh_CN'
 _preference = 'system'
 
 
+def system_ui_language():
+    """Use the OS display language even when a launcher exports LANG=C."""
+    if sys.platform == 'darwin':
+        from Foundation import NSLocale
+        preferred = NSLocale.preferredLanguages()
+        if preferred:
+            return str(preferred[0])
+    elif sys.platform == 'win32':
+        import ctypes
+        import locale
+        name = locale.windows_locale.get(ctypes.windll.kernel32.GetUserDefaultUILanguage())
+        if name:
+            return name
+    preferred = QLocale.system().uiLanguages()
+    return preferred[0] if preferred else QLocale.system().name()
+
+
 def resolve_language(preference='system', system_locale=None):
     if preference in ('zh_CN', 'en'):
         return preference
-    locale = system_locale if system_locale is not None else QLocale.system().name()
+    locale = system_locale if system_locale is not None else system_ui_language()
     return 'zh_CN' if locale.lower().replace('-', '_').startswith('zh') else 'en'
 
 
