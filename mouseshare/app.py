@@ -819,7 +819,7 @@ class MainWindow(QMainWindow):
 
     def save_diagnostics(self):
         # Opt-in local health snapshot, without keys, pointer paths or peer IDs.
-        if self.demo or not self.settings.get("diagnostics", False):
+        if self.demo or not (getattr(self, 'diagnostics_requested', False) or self.settings.get("diagnostics", False)):
             return
         import json
         report = {"version": __version__, "state": self.engine.state,
@@ -828,6 +828,8 @@ class MainWindow(QMainWindow):
                   "captured_moves": getattr(self.backend, "captured_moves", 0),
                   "cursor_shield": bool(getattr(getattr(self.backend, "_cursor_shield", None), "panels", [])),
                   "cursor_shield_error": getattr(getattr(self.backend, "_cursor_shield", None), "detail", "")}
+        import time
+        report.update(self.engine.health(), sampled_at=time.time(), recent_states=list(self.engine.health_transitions))
         path = self.settings.directory / "input-health.json"
         try:
             temp = path.with_suffix(".tmp")
@@ -1010,6 +1012,7 @@ def main():
     parser.add_argument('--preview-drop', action='store_true', help='Preview the drop overlay for 12 seconds, without input hooks')
     parser.add_argument('--drop-smoke-test', action='store_true', help='Validate native blur and clean up without hooks or network')
     parser.add_argument('--paste-to', help='Receive offered files into this existing local folder')
+    parser.add_argument('--diagnostics', action='store_true', help='Write local input health counts without key values')
     args = parser.parse_args()
     set_language('system')
     if sys.platform == "win32":
@@ -1049,8 +1052,8 @@ def main():
     existing = QLocalSocket()
     existing.connectToServer(name)
     if existing.waitForConnected(400):
-        from .context_menu import request
-        existing.write(request(args.paste_to))
+        from .context_menu import request, diagnostics_request
+        existing.write(diagnostics_request(True) if args.diagnostics else request(args.paste_to))
         existing.waitForBytesWritten(300)
         return 0
     QLocalServer.removeServer(name)
@@ -1062,6 +1065,7 @@ def main():
     try:
         settings = Settings()
         window = MainWindow(settings, Identity(settings.directory), args.demo)
+        window.diagnostics_requested = args.diagnostics
     except Exception as exc:
         QMessageBox.critical(None, "MouseShare", tr('启动失败：{p0}。请检查本机配置文件。', p0=type(exc).__name__))
         return 1
@@ -1081,7 +1085,10 @@ def main():
             try:
                 from .context_menu import parse_request
                 destination = parse_request(bytes(data))
-                if destination and window.file_clipboard:
+                if isinstance(destination, dict):
+                    window.diagnostics_requested = destination['diagnostics']
+                    window.save_diagnostics()
+                elif destination and window.file_clipboard:
                     window.file_clipboard.action('paste', destination)
                 else:
                     window.show_normal()

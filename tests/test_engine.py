@@ -325,3 +325,71 @@ def test_legacy_pair_never_hands_off_at_internal_monitor_border(tmp_path):
     now[0] += .2
     engine.tick()
     assert engine.state == 'pending'
+
+
+@pytest.mark.parametrize('kind', ['key', 'button'])
+def test_edge_dwell_restarts_after_releasing_input_without_leaving_edge(tmp_path, kind):
+    engine, now = setup(tmp_path)
+    move = dict(type='move', x=1919, y=500, dx=10, dy=0)
+    engine.physical(move)
+    field, value = ('key', 4) if kind == 'key' else ('button', 1)
+    engine.physical(dict(type=kind, **{field: value}, down=True))
+    engine.physical(dict(type=kind, **{field: value}, down=False))
+    engine.physical(move)
+    now[0] += .2
+    engine.tick()
+    assert engine.state == 'pending' and engine.backend.captured
+
+
+@pytest.mark.parametrize('y', [0, 1079])
+def test_return_rearms_while_moving_along_unconnected_top_or_bottom_edge(tmp_path, y):
+    from mouseshare.topology import Rect
+    engine, now = setup(tmp_path)
+    a, b = 'a'*64, 'b'*64
+    engine.local_id = a
+    engine.session.peer_id = b
+    engine.settings.set(desktop_layout=dict(enabled=True, revision=1, author=a,
+        nodes={a: Rect(0, 0, 320, 180).data(), b: Rect(320, 0, 320, 180).data()}))
+    hit_edge(engine, now)
+    engine.receive(dict(type='entered'))
+    engine.receive(dict(type='return'))
+    now[0] += 1
+    engine.physical(dict(type='move', x=900, y=y, dx=-20, dy=0))
+    engine.physical(dict(type='move', x=1919, y=y, dx=20, dy=0))
+    now[0] += .2
+    engine.tick()
+    assert engine.state == 'pending' and engine.backend.captured
+
+
+def test_local_health_counts_explain_blockers_without_logging_keys_or_pointer_paths(tmp_path):
+    engine, now = setup(tmp_path)
+    engine.backend.keys.add(225)
+    assert engine.health()['blocker'] == 'held-input'
+    assert engine.health()['physical_keys'] == 1
+    engine.backend.keys.clear()
+    engine.release()
+    assert engine.health()['blocker'] == 'move-inward'
+    now[0] += 1
+    engine.physical(dict(type='move', x=500, y=500, dx=-20, dy=0))
+    engine.physical(dict(type='move', x=1919, y=500, dx=20, dy=0))
+    assert engine.health()['blocker'] == 'edge-dwell'
+    now[0] += .2
+    engine.tick()
+    assert engine.health()['blocker'] == 'pending' and engine.health()['attempts'] == 1
+    now[0] += 2
+    engine.tick()
+    assert engine.health()['timeouts'] == 1
+    assert not {'keys', 'position', 'peer', 'peer_id', 'flow', 'last_position'} & engine.health().keys()
+
+
+def test_stale_physical_releases_reconcile_only_for_local_owner(tmp_path):
+    engine, now = setup(tmp_path)
+    calls = []
+    engine.backend.keys.add(225)
+    engine.backend.reconcile_physical = lambda: calls.append(engine.state)
+    engine.tick()
+    assert calls == ['local']
+    engine.state = 'receiving'
+    now[0] += 1
+    engine.tick()
+    assert calls == ['local']

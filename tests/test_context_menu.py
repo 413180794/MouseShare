@@ -87,3 +87,12 @@ def test_native_explorer_registration_is_quoted_user_scoped_and_removable():
     for path in REGISTRY_KEYS:
         with pytest.raises(FileNotFoundError):
             winreg.OpenKey(winreg.HKEY_CURRENT_USER, path)
+
+
+def test_diagnostics_ipc_accepts_only_an_explicit_boolean():
+    from mouseshare.context_menu import diagnostics_request
+    for enabled in (True, False):
+        assert parse_request(diagnostics_request(enabled)) == dict(diagnostics=enabled)
+    for invalid in (1, None, 'yes', {}, []):
+        with pytest.raises(ValueError):
+            parse_request(diagnostics_request(invalid))

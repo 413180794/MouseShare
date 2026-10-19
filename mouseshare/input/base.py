@@ -29,6 +29,7 @@ class BaseBackend:
         self.sharing_shortcuts_enabled = False
         self.switch_shortcut_enabled = False
         self.cursor_is_hidden = False
+        self.recovered_releases = 0
         self._monitors, self.monitor_checked = [], 0
 
     def physical(self, event):
@@ -78,6 +79,10 @@ class BaseBackend:
         self.cursor_is_hidden = bool(hidden)
 
     def focus_token(self):
+        return None
+
+    def reconcile_physical(self):
+        """Platforms may recover releases missed while native monitoring was interrupted."""
         return None
 
     def clipboard_shortcut(self, action):

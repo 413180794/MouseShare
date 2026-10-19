@@ -47,6 +47,7 @@ class Engine:
         self.edge_since = self.return_since = None
         self.cooldown = 0
         self.armed = True
+        self.rearm_edge = settings.get('side')
         self.last_position = self.remote_position = (0, 0)
         self.incoming_edge = 'left'
         self.handoff_side, self.handoff_ratio = settings.get('side'), 0.5
@@ -57,6 +58,9 @@ class Engine:
         self.edge_target = None
         self.handoff_point = None
         self.last_screen = None
+        self.last_tick = self.clock()
+        self.handoff_attempts = self.handoff_timeouts = 0
+        self.health_transitions = collections.deque(maxlen=32)
         self.events = collections.deque()
         self.condition = threading.Condition()
         self.stopped = False
@@ -151,6 +155,8 @@ class Engine:
         except OSError:
             self.error = tr('系统阻止了按键释放，请检查目标程序权限')
         self.cooldown, self.armed = self.clock()+0.8, False
+        self.rearm_edge = (self.incoming_edge if prior in {'receiving', 'standby'} else
+                           return_edge or self.handoff_side)
         if prior in {'sending', 'pending'}:
             edge = return_edge or self.handoff_side
             ratio = self.handoff_ratio if return_ratio is None else return_ratio
@@ -324,8 +330,7 @@ class Engine:
             self.last_position = event['x'], event['y']
             bounds = self.backend.monitor_at(self.last_position) if self.layout() else self.backend.bounds()
             screen = self.backend.screen_info()
-            if all(not at_edge(side, *self.last_position, bounds, margin=24)
-                   for side in (('left', 'right', 'top', 'bottom') if self.layout() else (self.settings.get('side'),))):
+            if not at_edge(self.rearm_edge, *self.last_position, bounds, margin=24):
                 self.armed = True
             candidates = []
             for side in self.edge_candidates(self.last_position, bounds):
@@ -340,7 +345,7 @@ class Engine:
                         candidates.append((key, side, ratio, target_ratio, mapped[2] if mapped else None, point))
             target = candidates[0] if len(candidates) == 1 else None
             if target and self.armed and self.available:
-                if self.edge_target is None or self.edge_target[:2] != target[:2]:
+                if self.edge_since is None or self.edge_target is None or self.edge_target[:2] != target[:2]:
                     self.edge_since = self.clock()
                 self.edge_target = target
             else:
@@ -349,6 +354,7 @@ class Engine:
             self.edge_since = None
 
     def begin(self, session, side, ratio, *, keep_capture=False, point=None):
+        self.handoff_attempts += 1
         if not keep_capture:
             self.flow = uuid.uuid4().hex if supports(session, 'multi-v1') else None
             self.controller = True
@@ -369,8 +375,11 @@ class Engine:
 
     def tick(self):
         now = self.clock()
+        self.last_tick = now
         if now-self.last_auto > 0.5:
             self.last_auto = now
+            if self.state == 'local' and (self.backend.keys or self.backend.buttons):
+                self.backend.reconcile_physical()
             screen = self.backend.screen_info()
             if screen != self.last_screen:
                 if self.last_screen is not None:
@@ -394,6 +403,7 @@ class Engine:
                     self.release(True)
                     self.announce()
         if self.state == 'pending' and now-self.pending_since > 1.5:
+            self.handoff_timeouts += 1
             self.release(True)
         if (self.state == 'local' and self.edge_since is not None and self.edge_target
                 and now-self.edge_since >= self.settings.get('dwell_ms')/1000 and now >= self.cooldown
@@ -408,6 +418,36 @@ class Engine:
                                                             monitor), screen) if len(screen['monitors']) > 1 else None)
                 self.begin(session, side, target_ratio, point=target_point)
         self.status()
+
+    def health(self):
+        """Local operational state, without key values, pointer paths or device IDs."""
+        now = self.clock()
+        if self.state != 'local':
+            blocker = self.state
+        elif not self.available:
+            blocker = 'local-blocked'
+        elif not self.session:
+            blocker = 'disconnected'
+        elif not self.armed:
+            blocker = 'move-inward'
+        elif self.backend.keys or self.backend.buttons:
+            blocker = 'held-input'
+        elif now < self.cooldown:
+            blocker = 'cooldown'
+        elif self.edge_target and self.edge_since is None:
+            blocker = 'dwell-interrupted'
+        elif self.edge_since is not None:
+            blocker = 'edge-dwell'
+        elif not self.peer_available and not any(self.availability.values()):
+            blocker = 'peer-blocked'
+        else:
+            blocker = 'away-from-connected-edge'
+        return dict(blocker=blocker, engine_age_ms=round(max(0, now-self.last_tick)*1000),
+                    physical_keys=len(self.backend.keys), physical_buttons=len(self.backend.buttons),
+                    injected_keys=len(self.backend.injected_keys), injected_buttons=len(self.backend.injected_buttons),
+                    attempts=self.handoff_attempts, timeouts=self.handoff_timeouts,
+                    recovered_releases=self.backend.recovered_releases,
+                    tap_interruptions=getattr(self.backend, 'tap_interruptions', 0))
 
     def flow_matches(self, message, session):
         return not supports(session, 'multi-v1') or bool(self.flow and message.get('flow') == self.flow)
@@ -564,6 +604,9 @@ class Engine:
             self.return_since = None
 
     def status(self):
+        health = self.health()
+        if not self.health_transitions or self.health_transitions[-1]['blocker'] != health['blocker']:
+            self.health_transitions.append(dict(blocker=health['blocker'], at=round(self.clock(), 3)))
         self.backend.switch_shortcut_enabled = bool(self.available and (self.peer_available or any(self.availability.values())))
         state = dict(state=self.state, game=self.game, manual_game=self.manual_game, auto_reason=self.auto_reason,
                      paused=self.paused, system_blocked=self.system_blocked,

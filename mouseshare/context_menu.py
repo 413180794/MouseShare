@@ -20,14 +20,22 @@ def request(destination=None):
                       ensure_ascii=False).encode('utf-8')+b'\n'
 
 
+def diagnostics_request(enabled):
+    return json.dumps(dict(action='diagnostics', diagnostics=enabled)).encode()+b'\n'
+
+
 def parse_request(data):
     if len(data) > 8192:
         raise ValueError('Local request too large')
     if data == b'show':
         return None
     value = json.loads(data)
-    if not isinstance(value, dict) or value.get('action') not in {'show', 'paste'}:
+    if not isinstance(value, dict) or value.get('action') not in {'show', 'paste', 'diagnostics'}:
         raise ValueError('Invalid local request')
+    if value['action'] == 'diagnostics':
+        if type(value.get('diagnostics')) is not bool:
+            raise ValueError('Invalid diagnostics preference')
+        return dict(diagnostics=value['diagnostics'])
     if value['action'] == 'show':
         return None
     path = value.get('destination')

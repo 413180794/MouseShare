@@ -30,6 +30,23 @@ class MacBackend(BaseBackend):
         self._anchor = None
         self._cursor_shield = CursorShield()
         self.captured_moves = 0
+        self.tap_interruptions = 0
+
+    def reconcile_physical(self):
+        # Only called while this computer owns its physical input. Never clear
+        # a real held key/button or inspect the receiver's synthetic key state.
+        with self._capture_lock:
+            state = Q.kCGEventSourceStateHIDSystemState
+            for key in tuple(self.keys):
+                code = HID_TO_MAC.get(key)
+                if code is not None and not Q.CGEventSourceKeyState(state, code):
+                    self.recovered_releases += 1
+                    self.physical(dict(type='key', key=key, down=False))
+            for button in tuple(self.buttons):
+                native = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4}.get(button)
+                if native is not None and not Q.CGEventSourceButtonState(state, native):
+                    self.recovered_releases += 1
+                    self.physical(dict(type='button', button=button, down=False))
 
     def cursor_hidden(self, hidden):
         self._cursor_shield.set_enabled(hidden)
@@ -182,6 +199,7 @@ class MacBackend(BaseBackend):
 
     def callback(self, proxy, kind, event, refcon):
         if kind in (Q.kCGEventTapDisabledByTimeout, Q.kCGEventTapDisabledByUserInput):
+            self.tap_interruptions += 1
             self.capture(False)
             self.emit({"type": "command", "action": "panic"})
             Q.CGEventTapEnable(self.tap, True)

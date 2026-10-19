@@ -6,7 +6,7 @@ Windows / macOS / Linux（X11）局域网鼠标键盘、剪贴板和文件共享
 
 [下载安装包](https://github.com/413180794/MouseShare/releases) · [构建记录](https://github.com/413180794/MouseShare/actions) · [双机验收清单](docs/ACCEPTANCE.md)
 
-**v0.7.1 为预览版。** 自动测试覆盖真实 TLS 双端／三端通信和控制状态机；真实桌面交互、系统授权及具体游戏环境仍需按验收清单确认。Linux 暂无实体电脑验收，CI 使用隔离 Xvfb 验证。
+**v0.7.2 为预览版。** 自动测试覆盖真实 TLS 双端／三端通信和控制状态机；真实桌面交互、系统授权及具体游戏环境仍需按验收清单确认。Linux 暂无实体电脑验收，CI 使用隔离 Xvfb 验证。
 
 ![MouseShare 界面示意，设备数据为演示数据](docs/screenshot.png)
 
@@ -18,12 +18,12 @@ Windows、macOS 和 Linux 均支持简体中文与英文。首次启动跟随系
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.7.1-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
-| Apple Silicon Mac，macOS 13+ | `MouseShare-0.7.1-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Intel Mac，macOS 13+ | `MouseShare-0.7.1-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Linux x64，Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.7.1-Linux-x64.deb` 或 `.tar.gz` | `sudo apt install ./文件名.deb`；便携包解压运行 |
-| Linux ARM64，Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.7.1-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
-| Windows 便携版 | `MouseShare-0.7.1-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
+| Windows 10/11 x64 | `MouseShare-0.7.2-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
+| Apple Silicon Mac，macOS 13+ | `MouseShare-0.7.2-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Intel Mac，macOS 13+ | `MouseShare-0.7.2-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Linux x64，Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.7.2-Linux-x64.deb` 或 `.tar.gz` | `sudo apt install ./文件名.deb`；便携包解压运行 |
+| Linux ARM64，Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.7.2-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
+| Windows 便携版 | `MouseShare-0.7.2-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
 
@@ -157,3 +157,5 @@ MIT。第三方组件许可见 [THIRD_PARTY.md](THIRD_PARTY.md) 及安装包中�
 
 ![Ubuntu dual-monitor and Windows laptop layout](docs/layout-multimonitor.png)
 
+
+输入诊断默认关闭。排查间歇性跨屏时，可运行 `MouseShare --diagnostics` 为当前实例临时开启，在本机数据目录读取 `input-health.json`。仅保存状态、数量和阻塞类别，不包含键值、鼠标轨迹、剪贴板内容或对端标识。退出进程后恢复默认。

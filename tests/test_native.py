@@ -397,3 +397,22 @@ def test_mac_repeat_is_marked_and_released_without_posting_to_desktop(monkeypatc
     backend.key(4, False)
     assert [v for f, v in flags if f == Q.kCGKeyboardEventAutorepeat] == [0, 1, 0]
     assert len(posts) == 3 and not backend.injected_keys
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='Quartz physical state reconciliation')
+def test_mac_recovers_missed_releases_and_preserves_actual_held_input(monkeypatch):
+    from mouseshare.input.macos import MacBackend, Q
+    from mouseshare.input.keymap import HID_TO_MAC
+    events = []
+    backend = MacBackend(events.append)
+    backend.keys.update({4, 225})
+    backend.buttons.update({1, 2})
+    backend.hotkey_keys.add(4)
+    monkeypatch.setattr(Q, 'CGEventSourceKeyState', lambda state, key: key == HID_TO_MAC[225])
+    monkeypatch.setattr(Q, 'CGEventSourceButtonState', lambda state, button: button == 1)
+    backend.reconcile_physical()
+    assert backend.keys == {225} and backend.buttons == {2}
+    assert not backend.hotkey_keys and backend.recovered_releases == 2
+    assert events == [dict(type='button', button=1, down=False)]
+    backend.reconcile_physical()
+    assert backend.keys == {225} and backend.buttons == {2} and backend.recovered_releases == 2
