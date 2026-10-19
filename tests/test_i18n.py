@@ -13,9 +13,9 @@ import pytest
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QLabel, QLineEdit
 
-from mouseshare.app import MainWindow
+from mouseshare.app import Bridge, MainWindow
 from mouseshare.config import Settings
-from mouseshare.i18n import language, resolve_language, set_language, tr
+from mouseshare.i18n import Message, language, resolve_language, set_language, tr
 from mouseshare.i18n_widgets import retranslate_widgets
 from mouseshare.permissions import PermissionGuide
 from mouseshare.security import Identity
@@ -175,3 +175,25 @@ def test_old_transfer_status_translates_but_filename_does_not(english_window, ap
     window.language_choice.setCurrentIndex(window.language_choice.findData('zh_CN'))
     assert row[1].text() == '接收 · 复制文件'
     assert row[2].text().startswith('接收完成，SHA-256 校验通过')
+
+
+def test_worker_signals_keep_message_sources_through_queued_delivery(english_window, app):
+    from PySide6.QtCore import Qt
+    window = english_window
+    bridge, received = Bridge(), []
+    bridge.error.connect(window.notice, Qt.ConnectionType.QueuedConnection)
+    bridge.status.connect(lambda state: received.append(state['error']), Qt.ConnectionType.QueuedConnection)
+    bridge.sharing.connect(window.sharing_event, Qt.ConnectionType.QueuedConnection)
+    message = tr('连接已断开（{p0}）', p0='TimeoutError')
+    bridge.error.emit(message)
+    bridge.status.emit(dict(error=message))
+    bridge.sharing.emit(dict(type='transfer', job='worker', direction='send', title='中文.txt',
+                            detail=tr('等待对方接收'), total=10, done=0, paths=[], status='waiting'))
+    app.processEvents()
+    assert isinstance(received[0], Message)
+    assert window.notice_label.text() == 'Disconnected (TimeoutError)'
+    detail = window.share_panel.rows['worker'][2]
+    assert detail.text().startswith('Waiting for acceptance')
+    window.language_choice.setCurrentIndex(window.language_choice.findData('zh_CN'))
+    assert window.notice_label.text() == '连接已断开（TimeoutError）'
+    assert detail.text().startswith('等待对方接收')

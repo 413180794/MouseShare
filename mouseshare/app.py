@@ -80,10 +80,12 @@ def shortcut(action):
 class Bridge(QObject):
     pair = Signal(object)
     peer = Signal(dict)
-    status = Signal(dict)
-    error = Signal(str)
-    sharing = Signal(dict)
-    auxiliary = Signal(dict)
+    # QVariant dict/str signals coerce Message subclasses to plain strings.
+    # Python object signals preserve sources/parameters across queued delivery.
+    status = Signal(object)
+    error = Signal(object)
+    sharing = Signal(object)
+    auxiliary = Signal(object)
 
 
 
