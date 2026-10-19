@@ -68,7 +68,20 @@ def test_native_explorer_registration_is_quoted_user_scoped_and_removable():
         for index, path in enumerate(REGISTRY_KEYS):
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, path+r'\command') as key:
                 line, kind = winreg.QueryValueEx(key, '')
-            assert kind == winreg.REG_SZ and line.endswith('--paste-to "'+('%V' if index == 0 else '%1')+'"')
+            placeholder = '%V' if index == 0 else '%1'
+            assert kind == winreg.REG_SZ and line.endswith('--paste-to "'+placeholder+'\\."')
+            import ctypes as C
+            shell = C.windll.shell32.CommandLineToArgvW
+            shell.argtypes = [C.c_wchar_p, C.POINTER(C.c_int)]
+            shell.restype = C.POINTER(C.c_wchar_p)
+            count = C.c_int()
+            parsed = shell(line.replace(placeholder, 'C:\\'), C.byref(count))
+            try:
+                assert parse_request(request(parsed[count.value-1])).lower() == 'c:\\'
+            finally:
+                free = C.windll.kernel32.LocalFree
+                free.argtypes = [C.c_void_p]
+                free(C.cast(parsed, C.c_void_p))
     finally:
         set_enabled(False)
     for path in REGISTRY_KEYS:

@@ -80,7 +80,9 @@ def set_enabled(enabled):
                     winreg.SetValueEx(key, 'Icon', 0, winreg.REG_SZ, subprocess.list2cmdline([sys.executable]))
                 with winreg.CreateKey(winreg.HKEY_CURRENT_USER, path+r'\command') as key:
                     # Explorer replaces its own %V/%1 placeholder, including spaces.
-                    line = subprocess.list2cmdline(command())+' --paste-to "'+('%V' if index == 0 else '%1')+'"'
+                    # Append \. so a drive root's trailing backslash cannot
+                    # escape the closing quote in Windows argv parsing.
+                    line = subprocess.list2cmdline(command())+' --paste-to "'+('%V' if index == 0 else '%1')+'\\."'
                     winreg.SetValueEx(key, '', 0, winreg.REG_SZ, line)
             else:
                 for name in (path+r'\command', path):
