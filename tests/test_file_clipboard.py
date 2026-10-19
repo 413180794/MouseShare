@@ -1,5 +1,6 @@
 """Local paste authorization and focus/clipboard/activity protection, with no OS injection."""
 import os
+from pathlib import Path
 from types import SimpleNamespace
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import pytest
@@ -149,7 +150,7 @@ def test_prefetch_populates_real_file_clipboard_without_synthetic_paste(hub, tmp
     file.write_text('complete, hash-verified transfer')
     control.transfer(dict(request=request['request'], peer=peer.peer_id, offer=request['offer'],
                           direction='receive', status='complete', paths=[str(file)]))
-    assert [url.toLocalFile() for url in control.sync.clipboard.mime.urls()] == [str(file)]
+    assert [Path(url.toLocalFile()) for url in control.sync.clipboard.mime.urls()] == [file]
     assert not calls
 
 

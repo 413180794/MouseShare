@@ -1,5 +1,5 @@
 import json
-from pathlib import Path
+from pathlib import PurePosixPath
 import sys
 from types import SimpleNamespace
 
@@ -51,7 +51,7 @@ def test_nautilus_action_preserves_unicode_spaces_and_shell_characters(monkeypat
     scope = {}
     exec(extension_source(args, 'Receive files here'), scope)
     provider = scope['MouseSharePaste']()
-    folder = SimpleNamespace(get_uri=lambda: Path('/tmp/中文 $ (files)').as_uri(), is_directory=lambda: True)
+    folder = SimpleNamespace(get_uri=lambda: PurePosixPath('/tmp/中文 $ (files)').as_uri(), is_directory=lambda: True)
     assert len(provider.get_background_items(folder)) == 1
     callbacks[0]()
     assert launched == [args+['--paste-to', '/tmp/中文 $ (files)']]
