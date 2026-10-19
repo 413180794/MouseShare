@@ -13,13 +13,13 @@ from mouseshare.input.linux import (Cookie, DeviceInfo, Event, HID_TO_X11, Linux
 from mouseshare.startup import desktop_entry
 
 
-def wait_for(predicate):
+def wait_for(predicate, diagnostic=lambda: ''):
     until = time.monotonic() + 4
     while time.monotonic() < until:
         if predicate():
             return
         time.sleep(0.01)
-    raise AssertionError('X11 event timeout')
+    raise AssertionError('X11 event timeout '+diagnostic())
 
 
 def test_session_guard_rejects_xwayland_and_missing_display():
@@ -144,9 +144,20 @@ def test_native_keyboard_grab_suppresses_focus_and_injection_has_no_echo():
         x.XMapWindow(display, window)
         x.XSetInputFocus(display, window, 1, 0)
         x.XSync(display, False)
+        def diagnostic():
+            return repr(dict(expected_focus=window, actual_focus=backend.focus_token(),
+                             pending=x.XPending(display), ready=backend.ready(), error=backend.error))
+        wait_for(lambda: backend.focus_token() == window, diagnostic)
         backend.key(4, True)
+        # Observe down before releasing: XTEST input is queued separately from
+        # Xlib requests, so XFlush alone is not an input-delivery barrier.
+        with backend.lock:
+            backend.api.x.XSync(backend.display, False)
+        wait_for(lambda: x.XPending(display) >= 1, diagnostic)
         backend.key(4, False)
-        wait_for(lambda: x.XPending(display) >= 2)
+        with backend.lock:
+            backend.api.x.XSync(backend.display, False)
+        wait_for(lambda: x.XPending(display) >= 2, diagnostic)
         types = []
         while x.XPending(display):
             event = Event()
