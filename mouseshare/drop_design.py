@@ -27,6 +27,7 @@ class DropVisual(QWidget):
     def set_context(self, target_name, count=0, summary='', state='ready'):
         self.target_name, self.count, self.summary = str(target_name), count, str(summary)
         self.state = state
+        self.close_button.setAccessibleName('关闭投递提示' if state in {'sending', 'unavailable'} else '取消文件投递')
         self.setAccessibleName('文件投递：'+self.target_name)
         self.update()
 
@@ -121,4 +122,5 @@ class DropVisual(QWidget):
         painter.setBrush(QColor(229, 248, 243, 10))
         painter.drawRoundedRect(key, 6, 6)
         text(key, 'Esc', 12, '#d7eae4')
-        text(QRectF(cx-22, baseline-13, 99, 26), '取消投递', 13, '#adc5bd')
+        text(QRectF(cx-22, baseline-13, 99, 26),
+             '收起提示' if self.state in {'sending', 'unavailable'} else '取消投递', 13, '#adc5bd')

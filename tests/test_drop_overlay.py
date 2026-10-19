@@ -105,6 +105,7 @@ def test_drop_targets_original_peer_once_even_if_selection_changes(portal):
     assert drop.isAccepted()
     assert calls == [(['/tmp/example.txt'], dict(peer_id=B))]
     assert controller.surface.visual.state == 'sending'
+    assert controller.surface.visual.close_button.accessibleName() == '关闭投递提示'
     controller.surface.dropEvent(drop)
     assert len(calls) == 1
 
