@@ -35,14 +35,13 @@ def test_settings_save_keeps_pairing_and_all_options(window, app):
     window.stack.setCurrentIndex(1)
     window.device_name.setText("My desktop")
     window.side.setCurrentIndex(window.side.findData("top"))
-    window.dwell.setValue(300)
     window.speed.setValue(1.5)
     window.swap.setChecked(True)
     window.games.setText("game.exe; another.exe")
     window.save_settings()
     saved = Settings(window.settings.directory)
     assert saved.get("name") == "My desktop"
-    assert saved.get("side") == "top" and saved.get("dwell_ms") == 300
+    assert saved.get("side") == "top" and not hasattr(window, 'dwell')
     assert saved.get("sensitivity") == 1.5 and saved.get("swap_ctrl_meta")
     assert saved.get("game_processes") == ["game.exe", "another.exe"]
     assert saved.get("peers") == paired

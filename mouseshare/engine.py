@@ -44,14 +44,12 @@ class Engine:
         self.peer_available = self.paused = self.system_blocked = False
         self.manual_game = settings.get('game_mode')
         self.auto_reason = self.error = ''
-        self.edge_since = self.return_since = None
-        self.cooldown = 0
-        self.armed = True
-        self.rearm_edge = settings.get('side')
+        self.route_edge = None
+        self.input_epoch = 0
         self.last_position = self.remote_position = (0, 0)
         self.incoming_edge = 'left'
         self.handoff_side, self.handoff_ratio = settings.get('side'), 0.5
-        self.pending_since = self.entered_at = self.last_auto = 0
+        self.pending_since = self.last_auto = 0
         self.pending_events = []
         self.last_status = None
         self.activity_counter = 0
@@ -87,7 +85,13 @@ class Engine:
                 self.events.append({'type': 'command', 'action': 'panic'})
                 self.condition.notify()
                 return False
-            if event.get('type') == 'move' and self.events and self.events[-1].get('type') == 'move':
+            if event.get('type') == 'move':
+                event = dict(event, _epoch=self.input_epoch,
+                             _captured=bool(self.backend and self.backend.captured),
+                             _last_dx=event['dx'], _last_dy=event['dy'])
+            if (event.get('type') == 'move' and self.events and self.events[-1].get('type') == 'move'
+                    and self.events[-1].get('_epoch') == event.get('_epoch')
+                    and self.events[-1].get('_captured') == event.get('_captured')):
                 previous = self.events[-1]
                 event = {**event, 'dx': previous['dx']+event['dx'], 'dy': previous['dy']+event['dy']}
                 self.events[-1] = event
@@ -110,6 +114,7 @@ class Engine:
                     if not self.events:
                         self.condition.wait(0.012)
                     batch = [self.events.popleft() for _ in range(min(128, len(self.events)))]
+                self.tick()
                 for event in batch:
                     self.handle(event)
                 self.tick()
@@ -145,7 +150,8 @@ class Engine:
         if self.session and self.session not in targets:
             targets.append(self.session)
         self.state = 'local'
-        self.edge_since = self.return_since = None
+        self.input_epoch += 1
+        self.route_edge = None
         self.edge_target = None
         self.pending_events.clear()
         self.backend.capture(False)
@@ -154,16 +160,15 @@ class Engine:
             self.backend.release_all()
         except OSError:
             self.error = tr('系统阻止了按键释放，请检查目标程序权限')
-        self.cooldown, self.armed = self.clock()+0.8, False
-        self.rearm_edge = (self.incoming_edge if prior in {'receiving', 'standby'} else
-                           return_edge or self.handoff_side)
         if prior in {'sending', 'pending'}:
             edge = return_edge or self.handoff_side
             ratio = self.handoff_ratio if return_ratio is None else return_ratio
             point = return_point or (self.handoff_point if return_ratio is None else None)
             screen = self.backend.screen_info()
-            self.backend.move(*(native(point, screen) if point else
-                                 project(entry_point(edge, ratio, self.backend.bounds()), screen)))
+            position = (native(point, screen) if point else
+                        project(entry_point(edge, ratio, self.backend.bounds()), screen))
+            self.backend.move(*position)
+            self.last_position = position
         if tell_peer:
             for session in targets:
                 message = {'type': 'release'}
@@ -199,7 +204,6 @@ class Engine:
             if self.session is None:
                 self.session = session
                 self.peer_available = False
-                self.armed = True
             self.announce()
             layout = self.layout()
             if layout and supports(session, 'layout-v1'):
@@ -305,13 +309,17 @@ class Engine:
         return crossing(layout['nodes'], self.screens(), source, side, point) if layout else None
 
     def physical(self, event):
+        if event['type'] == 'move' and (event.get('_epoch', self.input_epoch) != self.input_epoch
+                or self.state == 'local' and event.get('_captured', False)):
+            return
         self.activity(event)
         kind = event['type']
         if self.state in {'receiving', 'standby'}:
             self.release(True)
-            return
+            if kind != 'move':
+                return
         if self.state in {'sending', 'pending'}:
-            message = {k: v for k, v in event.items() if k not in {'x', 'y'}}
+            message = {k: v for k, v in event.items() if k not in {'x', 'y'} and not k.startswith('_')}
             if kind in {'move', 'scroll'}:
                 limit = 8192 if kind == 'move' else 100
                 for axis in ('dx', 'dy'):
@@ -330,10 +338,12 @@ class Engine:
             self.last_position = event['x'], event['y']
             bounds = self.backend.monitor_at(self.last_position) if self.layout() else self.backend.bounds()
             screen = self.backend.screen_info()
-            if not at_edge(self.rearm_edge, *self.last_position, bounds, margin=24):
-                self.armed = True
             candidates = []
+            dx, dy = event.get('_last_dx', event['dx']), event.get('_last_dy', event['dy'])
             for side in self.edge_candidates(self.last_position, bounds):
+                outward = {'left': dx < 0, 'right': dx > 0, 'top': dy < 0, 'bottom': dy > 0}[side]
+                if not outward:
+                    continue
                 ratio = self.edge_ratio(side, self.last_position, self.backend.bounds())
                 point = normalized(self.last_position, screen)
                 mapped = self.crossing(self.local_id, side, point)
@@ -344,18 +354,23 @@ class Engine:
                     if available:
                         candidates.append((key, side, ratio, target_ratio, mapped[2] if mapped else None, point))
             target = candidates[0] if len(candidates) == 1 else None
-            if target and self.armed and self.available:
-                if self.edge_since is None or self.edge_target is None or self.edge_target[:2] != target[:2]:
-                    self.edge_since = self.clock()
-                self.edge_target = target
-            else:
-                self.edge_since, self.edge_target = None, None
+            self.edge_target = target
+            if target and self.available and not self.backend.keys and not self.backend.buttons:
+                key, side, source_ratio, target_ratio, target_point, source_point = target
+                session = self.sessions.get(key) or (self.session if key == peer_id(self.session) else None)
+                if session:
+                    self.handoff_side, self.handoff_ratio = side, source_ratio
+                    monitor = self.backend.monitor_at(self.last_position)
+                    self.handoff_point = (normalized(entry_point(side, self.edge_ratio(side, self.last_position, monitor),
+                                                                monitor), screen) if len(screen['monitors']) > 1 else None)
+                    self.begin(session, side, target_ratio, point=target_point)
         elif kind in {'key', 'button'}:
-            self.edge_since = None
+            self.edge_target = None
 
     def begin(self, session, side, ratio, *, keep_capture=False, point=None):
         self.handoff_attempts += 1
         if not keep_capture:
+            self.input_epoch += 1
             self.flow = uuid.uuid4().hex if supports(session, 'multi-v1') else None
             self.controller = True
             self.participants = {peer_id(session)}
@@ -364,7 +379,7 @@ class Engine:
         self.peer_available = self.availability.get(peer_id(session), self.peer_available)
         self.state, self.pending_since = 'pending', self.clock()
         self.pending_events.clear()
-        self.edge_since = None
+        self.edge_target = None
         layout = self.layout()
         if layout and supports(session, 'layout-v1'):
             session.send(dict(type='layout', layout=layout))
@@ -405,18 +420,6 @@ class Engine:
         if self.state == 'pending' and now-self.pending_since > 1.5:
             self.handoff_timeouts += 1
             self.release(True)
-        if (self.state == 'local' and self.edge_since is not None and self.edge_target
-                and now-self.edge_since >= self.settings.get('dwell_ms')/1000 and now >= self.cooldown
-                and self.available and not self.backend.keys and not self.backend.buttons):
-            key, side, source_ratio, target_ratio, target_point, source_point = self.edge_target
-            session = self.sessions.get(key) or (self.session if key == peer_id(self.session) else None)
-            if session:
-                self.handoff_side, self.handoff_ratio = side, source_ratio
-                screen = self.backend.screen_info()
-                monitor = self.backend.monitor_at(self.last_position)
-                self.handoff_point = (normalized(entry_point(side, self.edge_ratio(side, self.last_position, monitor),
-                                                            monitor), screen) if len(screen['monitors']) > 1 else None)
-                self.begin(session, side, target_ratio, point=target_point)
         self.status()
 
     def health(self):
@@ -428,16 +431,8 @@ class Engine:
             blocker = 'local-blocked'
         elif not self.session:
             blocker = 'disconnected'
-        elif not self.armed:
-            blocker = 'move-inward'
         elif self.backend.keys or self.backend.buttons:
             blocker = 'held-input'
-        elif now < self.cooldown:
-            blocker = 'cooldown'
-        elif self.edge_target and self.edge_since is None:
-            blocker = 'dwell-interrupted'
-        elif self.edge_since is not None:
-            blocker = 'edge-dwell'
         elif not self.peer_available and not any(self.availability.values()):
             blocker = 'peer-blocked'
         else:
@@ -465,6 +460,7 @@ class Engine:
                 self.auxiliary(dict(type='screens_changed'))
             return
         if kind in {'available', 'blocked'}:
+            self.route_edge = None
             self.availability[key] = kind == 'available'
             if session is self.session:
                 self.peer_available = kind == 'available'
@@ -503,7 +499,8 @@ class Engine:
                                     and supports(session, 'monitors-v1') else
                                     project(entry_point(self.incoming_edge, message['position'], self.backend.bounds()), screen))
             self.backend.move(*self.remote_position)
-            self.state, self.entered_at, self.return_since = 'receiving', self.clock(), None
+            self.input_epoch += 1
+            self.state, self.route_edge = 'receiving', None
             self.send({'type': 'entered'})
             return
         active = session is self.session or self.controller and key in self.participants
@@ -570,6 +567,8 @@ class Engine:
         self.begin(destination, message['edge'], ratio, keep_capture=True, point=mapped[2] if mapped else None)
 
     def remote_move(self, dx, dy):
+        if self.state != 'receiving':
+            return
         speed = self.settings.get('sensitivity')
         x, y = self.remote_position
         screen = self.backend.screen_info()
@@ -586,22 +585,21 @@ class Engine:
             target = mapped[:2] if mapped else None
             if outward and (target if layout else side == self.incoming_edge):
                 candidates.append((side, ratio, target))
-        if (len(candidates) == 1 and self.clock()-self.entered_at > 0.4
-                and not self.backend.injected_keys and not self.backend.injected_buttons):
-            self.return_since = self.return_since if self.return_since is not None else self.clock()
-            if self.clock()-self.return_since > 0.08:
-                side, ratio, target = candidates[0]
+        if len(candidates) == 1 and not self.backend.injected_keys and not self.backend.injected_buttons:
+            side, ratio, target = candidates[0]
+            contact = (side, target[0] if target else '')
+            if self.route_edge != contact:
+                self.route_edge = contact
                 if layout and self.flow:
                     message = dict(type='route', edge=side, position=ratio, target=target[0])
                     if supports(self.session, 'monitors-v1'):
                         message['point'] = normalized((x, y), screen)
                     self.send(message)
-                    self.return_since = self.clock()+0.7
                 elif side == self.incoming_edge:
                     self.send(dict(type='return', position=ratio))
                     self.release(False)
         else:
-            self.return_since = None
+            self.route_edge = None
 
     def status(self):
         health = self.health()

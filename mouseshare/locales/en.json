@@ -457,5 +457,9 @@
   "右键扩展已更新，请重新打开文件管理器": "Context menu updated. Reopen your file manager.",
   "切换控制到此电脑": "Control this computer",
   "无需移动触控板；Ctrl+Alt+空格切换，再按一次收回。": "Switch without moving the trackpad. Ctrl+Alt+Space switches; press again to reclaim.",
-  "文件已共享：在目标窗口按 Ctrl+Alt+V 接收并粘贴": "Files shared. Press Ctrl+Alt+V in the destination window to receive and paste."
+  "文件已共享：在目标窗口按 Ctrl+Alt+V 接收并粘贴": "Files shared. Press Ctrl+Alt+V in the destination window to receive and paste.",
+  "跨屏方式": "Switching",
+  "碰到相接边缘立即切换": "Switch immediately at a connected edge",
+  "移到{p0}边缘立即跨屏": "Move to the {p0} edge to switch immediately",
+  "把鼠标移到相接边缘即可立即跨屏。": "Move to a connected edge to switch immediately."
 }

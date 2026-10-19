@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QScrollArea,
-    QSpinBox,
     QStackedWidget,
     QVBoxLayout,
 )
@@ -418,14 +417,7 @@ class MainWindow(QMainWindow):
             self.side.addItem(label, value)
         self.side.setCurrentIndex(self.side.findData(self.settings.get("side")))
         form.addRow(tr('简单双机方向（布局关闭时）'), self.side)
-        row = QHBoxLayout()
-        self.dwell = QSpinBox()
-        self.dwell.setRange(100, 1500)
-        self.dwell.setSuffix(" ms")
-        self.dwell.setValue(self.settings.get("dwell_ms"))
-        row.addWidget(self.dwell)
-        row.addWidget(text_label(tr('在边缘停留多久后切换'), "hint"), 1)
-        form.addRow(tr('边缘停留'), row)
+        form.addRow(tr('跨屏方式'), text_label(tr('碰到相接边缘立即切换'), 'hint', True))
         row = QHBoxLayout()
         self.speed = QDoubleSpinBox()
         self.speed.setRange(0.25, 4)
@@ -569,7 +561,7 @@ class MainWindow(QMainWindow):
 
     def form_values(self):
         return dict(name=self.device_name.text().strip(), side=self.side.currentData(),
-                    dwell_ms=self.dwell.value(), sensitivity=self.speed.value(),
+                    sensitivity=self.speed.value(),
                     auto_fullscreen=self.fullscreen.isChecked(),
                     game_processes=[s.strip() for s in self.games.text().split(";") if s.strip()],
                     startup=self.startup.isChecked(), swap_ctrl_meta=self.swap.isChecked(),
@@ -578,7 +570,7 @@ class MainWindow(QMainWindow):
     def bind_settings_feedback(self):
         self.saved_form = self.form_values()
         self.form_saved_once = False
-        for signal in (self.device_name.textChanged, self.side.currentIndexChanged, self.dwell.valueChanged,
+        for signal in (self.device_name.textChanged, self.side.currentIndexChanged,
                        self.speed.valueChanged, self.fullscreen.toggled, self.games.textChanged,
                        self.startup.toggled, self.swap.toggled, self.pointer_highlight.toggled, self.pointer_color.currentIndexChanged):
             signal.connect(self.settings_changed)
@@ -642,7 +634,7 @@ class MainWindow(QMainWindow):
         elif self.engine.layout():
             hint = tr('按屏幕布局，从相接的边缘跨屏；离线设备处会停止')
         else:
-            hint = tr('移到{p0}边缘，停留 {p1} ms 即可跨屏', p0=direction, p1=self.settings.get('dwell_ms'))
+            hint = tr('移到{p0}边缘立即跨屏', p0=direction)
         self.edge_hint.setText(hint)
         self.permission_cta.setVisible(not state.get("ready"))
 
@@ -715,7 +707,7 @@ class MainWindow(QMainWindow):
             title, detail = tr('控制已交接到下一台电脑'), tr('本机光标已隐藏。操作实体键鼠或按收回快捷键可恢复。')
         elif state["connected"]:
             title = tr('已连接 · 本机控制中')
-            detail = tr('已连接 {p0}。', p0=peer) + (tr('把鼠标移到设定边缘并稍作停留即可跨屏。') if state["peer_available"]
+            detail = tr('已连接 {p0}。', p0=peer) + (tr('把鼠标移到相接边缘即可立即跨屏。') if state["peer_available"]
                                          else tr('对方已暂停共享、开启游戏模式或等待授权。'))
         else:
             title, detail = tr('等待连接'), tr('启动另一台电脑上的 MouseShare，然后在下方选择电脑进行配对。')

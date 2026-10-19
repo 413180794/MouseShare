@@ -58,7 +58,7 @@ def test_handoff_waits_for_ack_then_routes_and_returns(tmp_path):
     assert engine.session.messages[-1] == {"type": "key", "key": 4, "down": True}
     engine.receive({"type": "return"})
     assert engine.state == "local" and not engine.backend.captured
-    assert not engine.armed
+    assert engine.backend.moves[-1] == pytest.approx((1911, 500))
 
 
 def test_keyboard_only_switch_establishes_ownership_and_reclaims_safely(tmp_path):
@@ -86,7 +86,8 @@ def test_fast_pending_motion_does_not_skip_target_entry_edge(tmp_path, side, pos
     target, _ = setup(tmp_path / "target")
     source.settings.set(side=side)
     target.backend.bounds = lambda: (100, 50, 2560, 1440)
-    source.physical({"type": "move", "x": position[0], "y": position[1], "dx": 800, "dy": 600})
+    dx, dy = {'left': (-800, 0), 'right': (800, 0), 'top': (0, -600), 'bottom': (0, 600)}[side]
+    source.physical({"type": "move", "x": position[0], "y": position[1], "dx": dx, "dy": dy})
     now[0] += 0.2
     source.tick()
     target.receive(source.session.messages[-1])
@@ -142,7 +143,7 @@ def test_auto_fullscreen_and_game_process(tmp_path):
     assert engine.game
 
 
-def test_no_switch_with_held_input_or_during_cooldown(tmp_path):
+def test_held_input_blocks_switch_and_release_needs_fresh_outward_movement(tmp_path):
     engine, now = setup(tmp_path)
     engine.backend.keys.add(225)
     hit_edge(engine, now)
@@ -153,8 +154,10 @@ def test_no_switch_with_held_input_or_during_cooldown(tmp_path):
     assert engine.state == "local"
     engine.backend.buttons.clear()
     engine.release()
-    hit_edge(engine, now)
+    engine.tick()
     assert engine.state == "local"
+    hit_edge(engine, now)
+    assert engine.state == 'pending'
 
 
 def test_disconnect_cleans_up_receiving_and_pending_timeout(tmp_path):
@@ -164,7 +167,7 @@ def test_disconnect_cleans_up_receiving_and_pending_timeout(tmp_path):
     engine.handle({"type": "disconnected", "session": engine.session})
     assert engine.session is None and not engine.backend.injected_keys
     engine.session = FakeSession()
-    engine.peer_available = engine.armed = True
+    engine.peer_available = True
     now[0] += 2
     hit_edge(engine, now)
     assert engine.state == "pending"
@@ -241,7 +244,8 @@ def test_source_returns_to_edge_with_mapped_position(tmp_path, side, finish):
     source.settings.set(side=side)
     target.backend.bounds = lambda: (-200, 70, 1920, 1080)
     position = entry_point(side, 0.25, bounds, inset=0)
-    source.physical({"type": "move", "x": position[0], "y": position[1], "dx": 10, "dy": 10})
+    dx, dy = {'left': (-10, 0), 'right': (10, 0), 'top': (0, -10), 'bottom': (0, 10)}[side]
+    source.physical({"type": "move", "x": position[0], "y": position[1], "dx": dx, "dy": dy})
     now[0] += 0.2
     source.tick()
     assert source.state == "pending" and source.backend.moves == []
@@ -328,12 +332,16 @@ def test_legacy_pair_never_hands_off_at_internal_monitor_border(tmp_path):
 
 
 @pytest.mark.parametrize('kind', ['key', 'button'])
-def test_edge_dwell_restarts_after_releasing_input_without_leaving_edge(tmp_path, kind):
+def test_released_input_allows_immediate_crossing_without_leaving_edge(tmp_path, kind):
     engine, now = setup(tmp_path)
     move = dict(type='move', x=1919, y=500, dx=10, dy=0)
-    engine.physical(move)
     field, value = ('key', 4) if kind == 'key' else ('button', 1)
+    held = engine.backend.keys if kind == 'key' else engine.backend.buttons
+    held.add(value)
+    engine.physical(move)
+    assert engine.state == 'local'
     engine.physical(dict(type=kind, **{field: value}, down=True))
+    held.discard(value)
     engine.physical(dict(type=kind, **{field: value}, down=False))
     engine.physical(move)
     now[0] += .2
@@ -368,11 +376,11 @@ def test_local_health_counts_explain_blockers_without_logging_keys_or_pointer_pa
     assert engine.health()['physical_keys'] == 1
     engine.backend.keys.clear()
     engine.release()
-    assert engine.health()['blocker'] == 'move-inward'
+    assert engine.health()['blocker'] == 'away-from-connected-edge'
     now[0] += 1
     engine.physical(dict(type='move', x=500, y=500, dx=-20, dy=0))
     engine.physical(dict(type='move', x=1919, y=500, dx=20, dy=0))
-    assert engine.health()['blocker'] == 'edge-dwell'
+    assert engine.health()['blocker'] == 'pending'
     now[0] += .2
     engine.tick()
     assert engine.health()['blocker'] == 'pending' and engine.health()['attempts'] == 1
@@ -393,3 +401,61 @@ def test_stale_physical_releases_reconcile_only_for_local_owner(tmp_path):
     now[0] += 1
     engine.tick()
     assert calls == ['local']
+
+
+@pytest.mark.parametrize('side,position,delta', [
+    ('left', (0, 500), (-20, 0)), ('right', (1919, 500), (20, 0)),
+    ('top', (700, 0), (0, -20)), ('bottom', (700, 1079), (0, 20)),
+])
+def test_first_outward_edge_move_switches_and_reverses_without_advancing_clock(tmp_path, side, position, delta):
+    source, now = setup(tmp_path/'source')
+    target, target_now = setup(tmp_path/'target')
+    source.settings.set(side=side, dwell_ms=1500)  # Legacy preferences have no effect.
+    source.physical(dict(type='move', x=position[0], y=position[1], dx=delta[0], dy=delta[1]))
+    assert now[0] == 100 and source.state == 'pending'
+    target.receive(source.session.messages[-1])
+    source.receive(target.session.messages[-1])
+    assert source.state == 'sending' and target.state == 'receiving'
+    target.remote_move(-delta[0], -delta[1])
+    assert target_now[0] == 100 and target.state == 'local'
+    source.receive(target.session.messages[-1])
+    assert source.state == 'local' and not source.backend.captured
+    source.physical(dict(type='move', x=position[0], y=position[1], dx=delta[0], dy=delta[1]))
+    assert now[0] == 100 and source.state == 'pending'
+
+
+def test_old_captured_motion_is_discarded_after_return_but_new_motion_crosses_immediately(tmp_path):
+    engine, now = setup(tmp_path)
+    hit_edge(engine, now)
+    engine.receive(dict(type='entered'))
+    engine.enqueue(dict(type='move', x=0, y=0, dx=20, dy=0))
+    old = engine.events.popleft()
+    assert old['_captured']
+    engine.receive(dict(type='return'))
+    messages = len(engine.session.messages)
+    engine.physical(old)
+    assert engine.state == 'local' and len(engine.session.messages) == messages
+    engine.enqueue(dict(type='move', x=1919, y=500, dx=20, dy=0))
+    engine.physical(engine.events.popleft())
+    assert engine.state == 'pending'
+    engine.receive(dict(type='entered'))
+    engine.enqueue(dict(type='move', x=0, y=0, dx=-5, dy=0))
+    engine.physical(engine.events.popleft())
+    assert engine.session.messages[-1] == dict(type='move', dx=-5, dy=0)
+
+
+def test_inward_or_stationary_edge_motion_does_not_bounce(tmp_path):
+    engine, now = setup(tmp_path)
+    for dx in (0, -20):
+        engine.physical(dict(type='move', x=1919, y=500, dx=dx, dy=0))
+        assert engine.state == 'local'
+
+
+def test_coalesced_reversal_preserves_latest_outward_direction(tmp_path):
+    engine, now = setup(tmp_path)
+    engine.enqueue(dict(type='move', x=1900, y=500, dx=-20, dy=0))
+    engine.enqueue(dict(type='move', x=1919, y=500, dx=20, dy=0))
+    event = engine.events.popleft()
+    assert event['dx'] == 0
+    engine.physical(event)
+    assert engine.state == 'pending' and engine.health()['attempts'] == 1

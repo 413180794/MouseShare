@@ -2,11 +2,11 @@
 
 [简体中文](README.md) · [English](README.en.md)
 
-Windows / macOS / Linux（X11）局域网鼠标键盘、剪贴板和文件共享。鼠标在指定屏幕边缘稍作停留后进入另一台电脑，键盘随之切换；沿原路移回即可返回。
+Windows / macOS / Linux（X11）局域网鼠标键盘、剪贴板和文件共享。鼠标移到相接边缘立即进入另一台电脑，键盘随之切换；沿原路移回即可返回。
 
 [下载安装包](https://github.com/413180794/MouseShare/releases) · [构建记录](https://github.com/413180794/MouseShare/actions) · [双机验收清单](docs/ACCEPTANCE.md)
 
-**v0.7.2 为预览版。** 自动测试覆盖真实 TLS 双端／三端通信和控制状态机；真实桌面交互、系统授权及具体游戏环境仍需按验收清单确认。Linux 暂无实体电脑验收，CI 使用隔离 Xvfb 验证。
+**v0.7.3 为预览版。** 自动测试覆盖真实 TLS 双端／三端通信和控制状态机；真实桌面交互、系统授权及具体游戏环境仍需按验收清单确认。Linux 暂无实体电脑验收，CI 使用隔离 Xvfb 验证。
 
 ![MouseShare 界面示意，设备数据为演示数据](docs/screenshot.png)
 
@@ -18,12 +18,12 @@ Windows、macOS 和 Linux 均支持简体中文与英文。首次启动跟随系
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.7.2-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
-| Apple Silicon Mac，macOS 13+ | `MouseShare-0.7.2-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Intel Mac，macOS 13+ | `MouseShare-0.7.2-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Linux x64，Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.7.2-Linux-x64.deb` 或 `.tar.gz` | `sudo apt install ./文件名.deb`；便携包解压运行 |
-| Linux ARM64，Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.7.2-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
-| Windows 便携版 | `MouseShare-0.7.2-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
+| Windows 10/11 x64 | `MouseShare-0.7.3-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
+| Apple Silicon Mac，macOS 13+ | `MouseShare-0.7.3-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Intel Mac，macOS 13+ | `MouseShare-0.7.3-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Linux x64，Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.7.3-Linux-x64.deb` 或 `.tar.gz` | `sudo apt install ./文件名.deb`；便携包解压运行 |
+| Linux ARM64，Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.7.3-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
+| Windows 便携版 | `MouseShare-0.7.3-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
 
@@ -56,7 +56,7 @@ sudo apt install libx11-6 libxi6 libxtst6 libxfixes3 libxrandr2 libxss1 \
 2. 在「设备连接 → 附近的设备」中选择对方，点击「配对并连接」。发现通过局域网组播和广播完成。
 3. **核对两台电脑显示相同的六位配对码，在两端分别确认。** 仅确认自己发起的连接；成功后记住设备证书，自动重连。
 4. 打开「屏幕布局」，用鼠标拖动电脑矩形，按实际摆放让边缘接触，再点「保存并应用布局」。可设置上下、左右、错位和不同显示大小，布局自动同步到参与布局的已配对 v0.5.0+ 设备。关闭布局时可继续使用原来的双机方向设置。
-5. 鼠标移到相接显示器的重叠区域，停留默认 180ms 后跨屏，键盘随之切换。可连续从 A→B→C，再沿布局返回。未接触、无重叠或离线的区域会停住。每两台需要直接控制或传文件的电脑均需独立配对；最多 8 台。
+5. 鼠标移到相接显示器的重叠区域，立即跨屏，键盘随之切换。可连续从 A→B→C，再沿布局返回。未接触、无重叠或离线的区域会停住。每两台需要直接控制或传文件的电脑均需独立配对；最多 8 台。
 
 自动发现受路由器客户端隔离、不同子网、VPN 或防火墙影响时，可展开「通过 IP 连接」并输入对方 IPv4 手动连接。使用端口：**UDP 24871 / TCP 24872**。Windows 安装程序的可选规则仅允许专用网络的本地子网入站。更换 Wi-Fi 后应检查网络是否为「专用」。
 
@@ -79,7 +79,7 @@ Windows 自动检测前台全屏窗口及游戏进程。默认已加入 32 组�
 
 - 关闭窗口后常驻系统托盘／菜单栏，从菜单「退出」结束进程。
 - 在设置中主动开启「登录电脑后自动启动」；Mac 先将应用移入 `/Applications`。
-- 调整边缘停留时间 100–1500ms 和接收端鼠标速度 0.25–4 倍。
+- 跨屏前进与返回均立即发起交接；接收端鼠标速度可调为 0.25–4 倍。
 - 字母、数字、常用符号、F1–F12、方向／导航键、数字小键盘和修饰键通过 USB HID 物理键位映射。中文输入由**接收端输入法**处理，布局跟随接收端。
 - 默认保留物理修饰键：Windows 键对应 Mac Command，Ctrl 对应 Control。可以在接收端开启「交换 Ctrl 与 ⌘ / Win」以沿用另一台电脑的复制粘贴习惯。
 - 取消配对应在两端分别操作。支持同时连接另外 7 台电脑；原机保持实体输入捕获，直接与当前目标通信。

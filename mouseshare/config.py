@@ -28,7 +28,7 @@ class Settings:
         self.lock = threading.RLock()
         self.values = {
             "name": platform.node() or "My computer",
-            "side": "right", "dwell_ms": 180, "sensitivity": 1.0,
+            "side": "right", "sensitivity": 1.0,
             "game_mode": False, "auto_fullscreen": True,
             "game_processes": list(DEFAULT_PROCESSES), "game_catalog_version": CATALOG_VERSION,
             "peers": {}, "startup": False,

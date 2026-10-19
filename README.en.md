@@ -2,11 +2,11 @@
 
 [简体中文](README.md) · [English](README.en.md)
 
-Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux (X11)** over your LAN. Move to the configured screen edge, pause briefly, and control the other computer. Move back through the opposite edge to return.
+Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux (X11)** over your LAN. Move to a connected screen edge to switch immediately. Move back through the opposite edge to return.
 
 [Download](https://github.com/413180794/MouseShare/releases) · [Builds](https://github.com/413180794/MouseShare/actions) · [Acceptance checklist](docs/ACCEPTANCE.md)
 
-**v0.7.2 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available.
+**v0.7.3 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available.
 
 ![English connection UI with isolated sample devices](docs/screenshot.en.png)
 
@@ -18,12 +18,12 @@ The app supports **English and Simplified Chinese** on Windows, macOS and Linux.
 
 | Platform | Package | Installation |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.7.2-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
-| Windows portable | `MouseShare-0.7.2-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
-| Apple Silicon, macOS 13+ | `MouseShare-0.7.2-macOS-arm64.dmg` | Drag the app into Applications |
-| Intel, macOS 13+ | `MouseShare-0.7.2-macOS-x86_64.dmg` | Drag the app into Applications |
-| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.7.2-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
-| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.7.2-Linux-arm64.deb` or `.tar.gz` | Same as above |
+| Windows 10/11 x64 | `MouseShare-0.7.3-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
+| Windows portable | `MouseShare-0.7.3-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
+| Apple Silicon, macOS 13+ | `MouseShare-0.7.3-macOS-arm64.dmg` | Drag the app into Applications |
+| Intel, macOS 13+ | `MouseShare-0.7.3-macOS-x86_64.dmg` | Drag the app into Applications |
+| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.7.3-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
+| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.7.3-Linux-arm64.deb` or `.tar.gz` | Same as above |
 
 Packages include Python and Qt. Linux still requires X11/Qt system libraries; the DEB declares these dependencies. The portable archive includes a user-level `install.sh` that adds a menu entry and preserves older version directories. See [Linux instructions](docs/INSTALL-Linux.txt).
 
@@ -62,7 +62,7 @@ On **Wayland**, this release offers file transfer and foreground clipboard butto
 2. On **Devices**, select the nearby computer and choose Pair and connect. Discovery uses multicast and broadcast.
 3. **Compare the six-digit code on both computers and approve on both.** Only approve connections you intended. The certificate fingerprint is remembered for reconnection.
 4. Open **Screen layout**. Drag computer rectangles to match your desk, join the desired edges, then save. Offsets and relative screen sizes are editable. Layouts synchronize to paired v0.5.0+ participants; the original two-computer direction setting is available when layout mode is disabled.
-5. Move to an overlapping shared edge and wait 180 ms by default. Input can continue A→B→C and back through the arrangement. Gaps, uncovered edges and offline neighbors stop the pointer. Up to eight computers are supported; independently pair every two computers that need direct control or file transfers.
+5. Move to an overlapping shared edge to switch immediately. Input can continue A→B→C and back through the arrangement. Gaps, uncovered edges and offline neighbors stop the pointer. Up to eight computers are supported; independently pair every two computers that need direct control or file transfers.
 
 If discovery is unavailable, expand Connect by IP and enter the other computer's IPv4 address. Allow **UDP 24871 and TCP 24872** on your trusted LAN. The Windows installer offers inbound rules restricted to the local subnet on private networks. Guest Wi-Fi isolation, VPNs, different subnets and firewalls can affect discovery.
 
@@ -111,7 +111,7 @@ A laptop can use its built-in keyboard and trackpad. Cross with the trackpad, us
 
 ## Everyday use and limits
 
-Closing the window keeps the app in the tray/menu bar where available. Login startup is opt-in. Edge dwell is adjustable from 100–1500 ms and receiver speed from 0.25–4×.
+Closing the window keeps the app in the tray/menu bar where available. Login startup is opt-in. Forward and return handoffs start immediately at a connected edge. Receiver speed is adjustable from 0.25–4×.
 
 Physical keyboard positions use USB HID IDs; the receiver's layout and IME produce text. The Windows key maps to macOS Command, Ctrl to Control. Enable Swap Ctrl and Command/Win on the receiver to change this behavior. On X11, the standard evdev/XKB keycode layout is used; relative mice and standard wheels are covered. Tablets, custom keycode maps and specific gaming drivers need acceptance.
 
