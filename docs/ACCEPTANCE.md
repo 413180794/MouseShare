@@ -251,3 +251,9 @@ Windows 正式包安装与运行检查均返回 0，运行于原交互会话；�
 修正统一为 inject_lock → X11 lock；各平台模拟复制／粘贴完整组合键在 inject_lock 内执行。任何新增 GUI 原生输入动作均须沿用此顺序，禁止持有 X11 连接锁后再申请注入状态锁。回归用例必须主动安排远端释放与剪贴板完成同时发生，验证两个线程都完成；单纯验证文件已收到或 Ctrl+V 已发出不足以验收。
 
 新增原生 X11 场景通过 FileClipboard 的完成回调把真实本地文件 URL 放入系统剪贴板，检查外部焦点窗口实际收到 Ctrl+V，再检查返回和下一次跨屏。覆盖本机控制、接收远端控制两种状态；子进程设有超时边界，回归死锁会明确失败并关闭隔离的 X 连接。旧锁序的复制／粘贴用例均失败，修正后均通过。原使用者实体 Ubuntu 桌面仍待复测。
+
+交付记录：二进制源码 `a8618588dfaa669f1feec247d4faf47b60e24709`；[五目标 CI](https://github.com/413180794/MouseShare/actions/runs/39197585815) 全部通过。Mac arm64／Intel 各 242 通过／18 平台跳过，Windows 222／38，Linux x64／ARM64 各 229／31。Windows 安装／卸载、两种 Linux DEB 和用户安装脚本、各平台打包后的依赖运行检查均通过。
+
+现有 Mac、Windows 均已原位升级到 v0.7.1 并恢复认证连接，设置逐字段保持、证书互信核对一致，临时 Windows 部署目录／服务／启动任务已清理。Mac 既有辅助功能和输入监控记录刷新后显示已就绪，原生模糊运行检查为 True。安装的 Mac DMG、Windows Setup 摘要与最终 CI 原产物一致。
+
+[发布工作流](https://github.com/413180794/MouseShare/actions/runs/39198083308) 在两端安装检查后公开 [v0.7.1](https://github.com/413180794/MouseShare/releases/tag/v0.7.1)，8 个安装包及 SHA256SUMS.txt 共 9 项已与本地原 CI 文件和服务端摘要逐项核对一致。Ubuntu 需完整结束旧进程再打开新版；原反馈的实体 Ubuntu 场景保留待使用者复测。
