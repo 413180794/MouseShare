@@ -85,6 +85,8 @@ U.UnhookWindowsHookEx.argtypes = [W.HANDLE]
 U.SendInput.argtypes = [W.UINT, C.POINTER(Input), C.c_int]
 U.SendInput.restype = W.UINT
 U.GetForegroundWindow.restype = W.HWND
+U.GetCursorPos.argtypes = [C.POINTER(W.POINT)]
+U.GetCursorPos.restype = W.BOOL
 U.GetWindowRect.argtypes = [W.HWND, C.POINTER(W.RECT)]
 U.GetClassNameW.argtypes = [W.HWND, W.LPWSTR, C.c_int]
 U.GetWindowThreadProcessId.argtypes = [W.HWND, C.POINTER(W.DWORD)]
@@ -135,6 +137,7 @@ class WindowsBackend(BaseBackend):
         self.started = threading.Event()
         self.mouse_hook = self.key_hook = None
         self._cursor_shield = WindowsCursorShield()
+        self.captured_moves = self.edge_pressure_moves = self.stationary_hook_moves = 0
 
     def cursor_hidden(self, hidden):
         self._cursor_shield.set_enabled(hidden)
@@ -259,7 +262,7 @@ class WindowsBackend(BaseBackend):
         return U.DefWindowProcW(hwnd, msg, wparam, lparam)
 
     def raw_motion(self, mouse, device):
-        if not self.captured or mouse.ulExtraInformation == MARKER:
+        if mouse.ulExtraInformation == MARKER:
             return
         dx, dy = mouse.lLastX, mouse.lLastY
         if mouse.usFlags & 1:  # absolute devices (tablets / some remote sessions)
@@ -274,7 +277,24 @@ class WindowsBackend(BaseBackend):
         if dx or dy:
             # Raw deltas remain available at the screen edge. The LL hook below
             # suppresses the local pointer; no recenter/warp is involved.
-            self.physical({"type": "move", "x": 0, "y": 0, "dx": dx, "dy": dy})
+            x = y = 0
+            if not self.captured:
+                point = W.POINT()
+                if not U.GetCursorPos(C.byref(point)):
+                    return
+                x, y = point.x, point.y
+                left, top, width, height = self.monitor_at((x, y))
+                # A clamped cursor (or a missing first hook baseline) has zero
+                # screen displacement even while the device pushes outward.
+                # Only supplement edge pressure; regular local movement stays
+                # on the LL hook to avoid duplicate motion/takeover events.
+                if not (dx < 0 and x <= left+2 or dx > 0 and x >= left+width-3
+                        or dy < 0 and y <= top+2 or dy > 0 and y >= top+height-3):
+                    return
+                self.edge_pressure_moves += 1
+            else:
+                self.captured_moves += 1
+            self.physical({"type": "move", "x": x, "y": y, "dx": dx, "dy": dy})
 
     def mouse_proc(self, code, msg, pointer):
         if code < 0:
@@ -282,6 +302,10 @@ class WindowsBackend(BaseBackend):
         try:
             data = C.cast(pointer, C.POINTER(MouseHook)).contents
             if data.dwExtraInfo == MARKER:
+                if msg == 0x0200 and not self.captured:
+                    # Our tagged return/injection establishes the coordinate
+                    # baseline, while remaining invisible to physical input.
+                    self.last = (data.pt.x, data.pt.y)
                 return U.CallNextHookEx(None, code, msg, pointer)
             if data.flags & 1:
                 return U.CallNextHookEx(None, code, msg, pointer)
@@ -290,7 +314,11 @@ class WindowsBackend(BaseBackend):
                 if self.captured:
                     return 1
                 dx, dy = (0, 0) if self.last is None else (x - self.last[0], y - self.last[1])
+                stationary = self.last == (x, y)
                 self.last = (x, y)
+                if stationary:
+                    self.stationary_hook_moves += 1
+                    return U.CallNextHookEx(None, code, msg, pointer)
                 event = {"type": "move", "x": x, "y": y, "dx": dx, "dy": dy}
             elif msg in (0x020A, 0x020E):
                 amount = C.c_short(data.mouseData >> 16).value / 120

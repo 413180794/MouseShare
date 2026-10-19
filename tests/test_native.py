@@ -87,12 +87,21 @@ def test_win32_input_struct_layout_and_hook_thread():
 @pytest.mark.skipif(sys.platform != "win32", reason="Win32 raw mouse input")
 def test_raw_motion_keeps_source_at_edge_and_suppresses_local_pointer(monkeypatch):
     from mouseshare.input.base import MARKER
-    from mouseshare.input.windows import MouseHook, RawMouse, WindowsBackend
+    from mouseshare.input.windows import MouseHook, RawMouse, U, W, WindowsBackend
 
     events, warps = [], []
     backend = WindowsBackend(events.append)
     monkeypatch.setattr(backend, "bounds", lambda: (0, 0, 1920, 1080))
+    monkeypatch.setattr(backend, 'monitors', lambda: [
+        dict(id='test', x=0, y=0, w=1920, h=1080, primary=True)])
     monkeypatch.setattr(backend, "move", lambda x, y: warps.append((x, y)))
+
+    def center(pointer):
+        point = ctypes.cast(pointer, ctypes.POINTER(W.POINT)).contents
+        point.x, point.y = 960, 540
+        return 1
+
+    monkeypatch.setattr(U, 'GetCursorPos', center)
 
     def motion(x, y):
         data = MouseHook()

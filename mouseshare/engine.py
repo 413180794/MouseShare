@@ -445,6 +445,8 @@ class Engine:
                     injected_keys=len(self.backend.injected_keys), injected_buttons=len(self.backend.injected_buttons),
                     attempts=self.handoff_attempts, timeouts=self.handoff_timeouts,
                     handoff_ms=list(self.handoff_durations), pending_moves_discarded=self.pending_moves_discarded,
+                    edge_pressure_moves=getattr(self.backend, 'edge_pressure_moves', 0),
+                    stationary_hook_moves=getattr(self.backend, 'stationary_hook_moves', 0),
                     recovered_releases=self.backend.recovered_releases,
                     tap_interruptions=getattr(self.backend, 'tap_interruptions', 0))
 
