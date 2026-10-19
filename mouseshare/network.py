@@ -12,8 +12,19 @@ import time
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 
-from .protocol import (DISCOVERY_PORT, INPUT_PORT, MAX_FRAME, MULTICAST_GROUP,
-                       VERSION, Decoder, ProtocolError, decode, frame, valid_input)
+from .i18n import tr
+from .protocol import (
+    DISCOVERY_PORT,
+    INPUT_PORT,
+    MAX_FRAME,
+    MULTICAST_GROUP,
+    VERSION,
+    Decoder,
+    ProtocolError,
+    decode,
+    frame,
+    valid_input,
+)
 from .security import check_hello, pairing_code, transcript, unb64
 
 
@@ -58,7 +69,7 @@ class Discovery:
                 sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
                                 socket.inet_aton(MULTICAST_GROUP) + socket.inet_aton("0.0.0.0"))
             except OSError:
-                self.on_error("组播不可用，正在使用广播发现；也可以手动输入 IP")
+                self.on_error(tr('组播不可用，正在使用广播发现；也可以手动输入 IP'))
             sock.settimeout(0.4)
             next_send = 0
             seen = {}
@@ -98,7 +109,7 @@ class Discovery:
                     continue
         except OSError:
             if not self.stop_event.is_set():
-                self.on_error("自动发现端口不可用；请检查防火墙或使用手动 IP 连接")
+                self.on_error(tr('自动发现端口不可用；请检查防火墙或使用手动 IP 连接'))
         finally:
             if self.sock:
                 self.sock.close()
@@ -228,7 +239,7 @@ class Session:
             self.owner.settings.trust(self.peer_id, self.peer_name, self.sock.getpeername()[0])
 
     def run(self):
-        error = "连接已结束"
+        error = tr('连接已结束')
         try:
             self.raw.settimeout(6)
             self.raw.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -275,7 +286,7 @@ class Session:
                         self.owner.on_message(self, message)
         except Exception as exc:
             # Exception class is enough for diagnostics; packet and key contents stay private.
-            error = f"连接已断开（{type(exc).__name__}）"
+            error = tr('连接已断开（{p0}）', p0=type(exc).__name__)
         finally:
             self.connected = False
             self.stopped.set()
@@ -360,17 +371,17 @@ class Network:
         """Run a bounded bulk channel on the same firewall port as the input lane."""
         control = self.sessions.get(peer_id) if peer_id else self.session
         if not control or not control.connected or "sharing-v1" not in control.peer_features:
-            raise ConnectionError("两端均需升级至支持文件共享的版本")
+            raise ConnectionError(tr('两端均需升级至支持文件共享的版本'))
         raw = socket.create_connection((control.sock.getpeername()[0], control.peer_port), timeout=5)
         channel = Session(self, raw, False, control.peer_id, lane="data", work=work)
         with self.lock:
             if self.stopped.is_set() or len(self.channels) >= 32:
                 raw.close()
-                raise ConnectionError("传输通道繁忙，请稍后重试")
+                raise ConnectionError(tr('传输通道繁忙，请稍后重试'))
             self.channels.add(channel)
         channel.run()
         if not getattr(channel, "work_finished", False):
-            raise ConnectionError("传输连接已断开或对方拒绝请求")
+            raise ConnectionError(tr('传输连接已断开或对方拒绝请求'))
 
     def channel_finished(self, session):
         with self.lock:
@@ -391,7 +402,7 @@ class Network:
                 raw = socket.create_connection((host, port), timeout=4)
                 self.adopt(raw, False, expected_id)
             except OSError:
-                self.on_error("连接失败，请检查对方已启动、IP 地址和防火墙")
+                self.on_error(tr('连接失败，请检查对方已启动、IP 地址和防火墙'))
             finally:
                 with self.lock:
                     self.dialing.discard(key)

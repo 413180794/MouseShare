@@ -5,6 +5,7 @@ import os
 import select
 import threading
 
+from ..i18n import tr
 from .base import ALT, CTRL, BaseBackend
 from .keymap import WIN_SCANS
 
@@ -21,9 +22,9 @@ HID_BUTTONS = {hid: code for code, hid in BUTTONS.items()}
 def session_problem(environ=None):
     env = os.environ if environ is None else environ
     if env.get('XDG_SESSION_TYPE', '').lower() == 'wayland' or env.get('WAYLAND_DISPLAY'):
-        return '当前为 Wayland 会话。键鼠共享请注销后选择 X11／Xorg 会话；文件传输可继续使用。'
+        return tr('当前为 Wayland 会话。键鼠共享请注销后选择 X11／Xorg 会话；文件传输可继续使用。')
     if not env.get('DISPLAY'):
-        return '未找到 X11 桌面。请在已登录的图形桌面中启动 MouseShare。'
+        return tr('未找到 X11 桌面。请在已登录的图形桌面中启动 MouseShare。')
     return ''
 
 
@@ -89,7 +90,7 @@ class X11:
         def lib(name):
             found = ctypes.util.find_library(name)
             if not found:
-                raise OSError(f'缺少 X11 系统库：{name}。请按 Linux 安装说明安装依赖。')
+                raise OSError(tr('缺少 X11 系统库：{p0}。请按 Linux 安装说明安装依赖。', p0=name))
             return C.CDLL(found)
         self.x, self.xi, self.xt, self.rr, self.ss, self.xf = [lib(n) for n in ['X11', 'Xi', 'Xtst', 'Xrandr', 'Xss', 'Xfixes']]
         D, U, Int, P = C.c_void_p, C.c_ulong, C.c_int, C.POINTER
@@ -133,7 +134,7 @@ class X11:
             fn = getattr(library, name)
             fn.restype, fn.argtypes = result, args
         if not self.x.XInitThreads():
-            raise OSError('无法初始化 X11 线程支持')
+            raise OSError(tr('无法初始化 X11 线程支持'))
         # Passive hotkeys may already be owned by the desktop. Preserve the
         # connection and record the failed grab instead of Xlib exiting.
         self.grab_errors = set()
@@ -157,7 +158,7 @@ class X11:
 
 def raw_axes(raw):
     if not 0 <= raw.valuators.mask_len <= 32:
-        raise OSError('无效的 X11 轴数据')
+        raise OSError(tr('无效的 X11 轴数据'))
     axes, index = {}, 0
     for bit in range(raw.valuators.mask_len * 8):
         if raw.valuators.mask[bit // 8] & (1 << (bit % 8)):
@@ -193,7 +194,7 @@ class LinuxBackend(BaseBackend):
         self.api = self.api or X11()
         display = self.api.x.XOpenDisplay(None)
         if not display:
-            raise OSError('无法访问当前 X11 桌面。请用登录桌面的普通用户启动，检查 DISPLAY 与 XAUTHORITY。')
+            raise OSError(tr('无法访问当前 X11 桌面。请用登录桌面的普通用户启动，检查 DISPLAY 与 XAUTHORITY。'))
         self.display = display
         self.root = self.api.x.XDefaultRootWindow(display)
         opcode, event, error = C.c_int(), C.c_int(), C.c_int()
@@ -225,14 +226,14 @@ class LinuxBackend(BaseBackend):
                 x, xi, xt = self.api.x, self.api.xi, self.api.xt
                 major, minor = C.c_int(2), C.c_int(2)
                 if xi.XIQueryVersion(self.display, C.byref(major), C.byref(minor)) != 0 or (major.value, minor.value) < (2, 1):
-                    raise OSError('键鼠共享需要 XInput 2.1 或更新版本')
+                    raise OSError(tr('键鼠共享需要 XInput 2.1 或更新版本'))
                 opcode, base, error = C.c_int(), C.c_int(), C.c_int()
                 if not x.XQueryExtension(self.display, b'XInputExtension', C.byref(opcode), C.byref(base), C.byref(error)):
-                    raise OSError('当前 X11 服务未提供 XInput')
+                    raise OSError(tr('当前 X11 服务未提供 XInput'))
                 self.opcode = opcode.value
                 a, b, c, d = [C.c_int() for _ in range(4)]
                 if not xt.XTestQueryExtension(self.display, C.byref(a), C.byref(b), C.byref(c), C.byref(d)):
-                    raise OSError('当前 X11 服务未提供 XTEST')
+                    raise OSError(tr('当前 X11 服务未提供 XTEST'))
                 count = C.c_int()
                 devices = xi.XIQueryDevice(self.display, 0, C.byref(count))
                 try:
@@ -242,12 +243,12 @@ class LinuxBackend(BaseBackend):
                     if devices:
                         xi.XIFreeDeviceInfo(devices)
                 if not self.test_sources:
-                    raise OSError('无法识别 XTEST 注入设备，已停止以防输入回传')
+                    raise OSError(tr('无法识别 XTEST 注入设备，已停止以防输入回传'))
                 bits = sum(1 << kind for kind in range(13, 18))
                 mask = (C.c_ubyte * 4)(*(bits >> (8 * i) & 255 for i in range(4)))
                 event_mask = EventMask(1, 4, mask)  # XIAllMasterDevices: no duplicate slave packets.
                 if xi.XISelectEvents(self.display, self.root, C.byref(event_mask), 1) != 0:
-                    raise OSError('无法监听 X11 原始输入')
+                    raise OSError(tr('无法监听 X11 原始输入'))
                 bitmap = x.XCreateBitmapFromData(self.display, self.root, b'\0', 1, 1)
                 color = Color()
                 self.cursor = x.XCreatePixmapCursor(self.display, bitmap, bitmap, C.byref(color), C.byref(color), 0, 0)
@@ -277,7 +278,7 @@ class LinuxBackend(BaseBackend):
                 elif not x.XPending(self.display):
                     select.select([fd], [], [], 0.02)
         except Exception as exc:
-            self.error = str(exc) if isinstance(exc, OSError) else 'X11 输入监听已安全停止，请重新检查'
+            self.error = str(exc) if isinstance(exc, OSError) else tr('X11 输入监听已安全停止，请重新检查')
             self.emit({'type': 'command', 'action': 'panic'})
         finally:
             self.running = False
@@ -376,7 +377,7 @@ class LinuxBackend(BaseBackend):
             keyboard = x.XGrabKeyboard(self.display, self.window, False, 1, 1, 0)
             if pointer != 0 or keyboard != 0:
                 self.capture(False)
-                raise OSError('键鼠正在被其他应用独占，请关闭占用后重新检查')
+                raise OSError(tr('键鼠正在被其他应用独占，请关闭占用后重新检查'))
             x.XSync(self.display, False)
             self.captured = True
 

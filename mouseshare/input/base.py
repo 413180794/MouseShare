@@ -2,6 +2,8 @@
 import threading
 import time
 
+from ..i18n import tr
+
 MARKER = 0x4D534852
 CTRL = {224, 228}
 ALT = {226, 230}
@@ -120,7 +122,7 @@ class BaseBackend:
 class NullBackend(BaseBackend):
     """Headless test backend for state-machine tests and unsupported platforms."""
     def start(self):
-        self.error = "当前平台缺少原生键鼠输入服务"
+        self.error = tr('当前平台缺少原生键鼠输入服务')
 
     def move(self, x, y):
         pass

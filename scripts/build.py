@@ -90,12 +90,25 @@ def main():
         import plistlib
         info = bundle / "Contents/Info.plist"
         content = plistlib.loads(info.read_bytes())
-        content.update({"CFBundleShortVersionString": "0.5.2", "CFBundleVersion": "14",
+        content.update({"CFBundleShortVersionString": "0.6.0", "CFBundleVersion": "15",
                         "LSMinimumSystemVersion": "13.0",
-                        "NSLocalNetworkUsageDescription": "自动发现局域网中的电脑，并共享鼠标和键盘。",
-                        "NSInputMonitoringUsageDescription": "读取键鼠输入以在您配对的电脑之间切换控制。",
+                        "CFBundleDevelopmentRegion": "en",
+                        "CFBundleLocalizations": ["en", "zh-Hans"],
+                        "NSLocalNetworkUsageDescription": "Discover computers on your local network to share input and files.",
+                        "NSInputMonitoringUsageDescription": "Read keyboard and mouse input to switch control between your paired computers.",
                         "NSHighResolutionCapable": True})
         info.write_bytes(plistlib.dumps(content))
+        descriptions = {
+            'en': ('Discover computers on your local network to share input and files.',
+                   'Read keyboard and mouse input to switch control between your paired computers.'),
+            'zh-Hans': ('自动发现局域网中的电脑，共享键鼠与文件。', '读取键鼠输入，在已配对的电脑之间切换控制。'),
+        }
+        for locale, (network, monitoring) in descriptions.items():
+            localized = bundle / 'Contents/Resources' / (locale+'.lproj')
+            localized.mkdir(parents=True, exist_ok=True)
+            values = {'NSLocalNetworkUsageDescription': network, 'NSInputMonitoringUsageDescription': monitoring}
+            strings = '\n'.join(f'{json.dumps(k)} = {json.dumps(v, ensure_ascii=False)};' for k, v in values.items())
+            (localized / 'InfoPlist.strings').write_text(strings+'\n', encoding='utf-16')
         licenses(bundle / "Contents/Resources/licenses")
         run("codesign", "--force", "--deep", "--sign", "-", bundle)
         run("codesign", "--verify", "--deep", "--strict", bundle)
@@ -106,8 +119,8 @@ def main():
         stage.mkdir(parents=True)
         shutil.copytree(bundle, stage / bundle.name, symlinks=True)
         (stage / "Applications").symlink_to("/Applications")
-        shutil.copyfile(ROOT / "docs/INSTALL-macOS.txt", stage / "安装说明.txt")
-        target = DIST / f"MouseShare-0.5.2-macOS-{platform.machine()}.dmg"
+        shutil.copyfile(ROOT / "docs/INSTALL-macOS.txt", stage / "INSTALL.txt")
+        target = DIST / f"MouseShare-0.6.0-macOS-{platform.machine()}.dmg"
         target.unlink(missing_ok=True)
         run("hdiutil", "create", "-volname", "MouseShare", "-srcfolder", stage,
             "-ov", "-format", "UDZO", target)
@@ -117,8 +130,8 @@ def main():
         run(DIST / "MouseShare/MouseShare.exe", "--drop-smoke-test")
         compiler = Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe")
         run(compiler, ROOT / "packaging/windows.iss")
-        shutil.copyfile(ROOT / "docs/INSTALL-Windows.txt", DIST / "MouseShare/安装说明.txt")
-        shutil.make_archive(str(DIST / "MouseShare-0.5.2-Windows-x64-portable"), "zip",
+        shutil.copyfile(ROOT / "docs/INSTALL-Windows.txt", DIST / "MouseShare/INSTALL.txt")
+        shutil.make_archive(str(DIST / "MouseShare-0.6.0-Windows-x64-portable"), "zip",
                             DIST, "MouseShare")
     elif sys.platform.startswith("linux"):
         licenses(DIST / "MouseShare/licenses")
@@ -126,7 +139,7 @@ def main():
         run(DIST / "MouseShare/MouseShare", "--drop-smoke-test")
         sys.path.insert(0, str(ROOT / "packaging"))
         from linux import build_linux
-        build_linux(ROOT, DIST, "0.5.2")
+        build_linux(ROOT, DIST, "0.6.0")
     else:
         raise RuntimeError("Unsupported build platform")
 

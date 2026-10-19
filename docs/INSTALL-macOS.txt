@@ -1,4 +1,4 @@
-MouseShare 0.5.2 — macOS 13+（Apple Silicon / Intel 请下载对应架构）
+MouseShare 0.6.0 — macOS 13+（Apple Silicon / Intel 请下载对应架构）
 
 1. 打开 DMG，把 MouseShare 拖到 Applications（应用程序）。
 2. 从应用程序启动 MouseShare。本预览版使用本机签名，尚无 Apple 开发者公证。
@@ -26,3 +26,15 @@ MouseShare 0.5.2 — macOS 13+（Apple Silicon / Intel 请下载对应架构）
 
 版本与校验：https://github.com/413180794/MouseShare/releases
 
+
+界面支持中文与英文，可在「共享设置 → 本机偏好 → 界面语言」立即切换；首次跟随系统。
+
+English quick start
+1. Drag MouseShare into Applications and open it. This preview uses an ad hoc signature.
+2. Use System permissions to enable Accessibility and Input Monitoring. Each button opens
+   the matching System Settings page; grant access and follow any Quit & Reopen prompt.
+3. Start MouseShare on both computers, compare the six-digit pairing codes, and approve both.
+4. Arrange touching screens in Screen layout and apply. Move to a shared edge to switch.
+5. Control+Option+Esc reclaims input; Control+Option+F12 toggles game mode (Fn may be needed).
+6. Choose Preferences > Local preferences > Language for English or Simplified Chinese.
+Read the full English guide: https://github.com/413180794/MouseShare/blob/main/README.en.md

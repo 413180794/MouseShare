@@ -4,6 +4,7 @@ import os
 import platform
 import threading
 from pathlib import Path
+
 from .games import CATALOG_VERSION, DEFAULT_PROCESSES, upgrade_defaults
 
 
@@ -31,6 +32,7 @@ class Settings:
             "game_mode": False, "auto_fullscreen": True,
             "game_processes": list(DEFAULT_PROCESSES), "game_catalog_version": CATALOG_VERSION,
             "peers": {}, "startup": False,
+            "language": "system",
         }
         if self.path.exists():
             loaded = json.loads(self.path.read_text(encoding="utf-8"))

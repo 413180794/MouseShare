@@ -4,6 +4,7 @@ import threading
 import time
 import uuid
 
+from .i18n import tr
 from .protocol import OPPOSITE
 from .topology import layout_key, neighbor, validate_layout
 
@@ -106,7 +107,7 @@ class Engine:
                     self.handle(event)
                 self.tick()
             except Exception as exc:
-                self.error = f'共享已安全停止（{type(exc).__name__}），请重新检查权限'
+                self.error = tr('共享已安全停止（{p0}），请重新检查权限', p0=type(exc).__name__)
                 self.paused = True
                 self.release(True)
                 self.status()
@@ -145,7 +146,7 @@ class Engine:
         try:
             self.backend.release_all()
         except OSError:
-            self.error = '系统阻止了按键释放，请检查目标程序权限'
+            self.error = tr('系统阻止了按键释放，请检查目标程序权限')
         self.cooldown, self.armed = self.clock()+0.8, False
         if prior in {'sending', 'pending'}:
             edge = return_edge or self.handoff_side
@@ -166,7 +167,7 @@ class Engine:
         if self.local_id not in value['nodes']:
             if session:
                 return
-            raise ValueError('布局必须包含本机')
+            raise ValueError(tr('布局必须包含本机'))
         if session and (peer_id(session) not in value['nodes'] or layout_key(value) <= layout_key(
                 self.settings.get('desktop_layout', {}))):
             return
@@ -343,8 +344,8 @@ class Engine:
                 self.announce()
             process, fullscreen = self.backend.foreground()
             games = {name.casefold() for name in self.settings.get('game_processes')}
-            reason = f'游戏进程：{process}' if process.casefold() in games else (
-                '前台全屏窗口' if fullscreen and self.settings.get('auto_fullscreen') else '')
+            reason = tr('游戏进程：{p0}', p0=process) if process.casefold() in games else (
+                tr('前台全屏窗口') if fullscreen and self.settings.get('auto_fullscreen') else '')
             if reason != self.auto_reason:
                 before = self.game
                 self.auto_reason = reason

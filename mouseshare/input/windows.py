@@ -3,6 +3,7 @@ import ctypes as C
 import threading
 from ctypes import wintypes as W
 
+from ..i18n import tr
 from .base import MARKER, BaseBackend
 from .keymap import HID_TO_WIN, WIN_SCANS
 from .windows_cursor import WindowsCursorShield
@@ -190,7 +191,7 @@ class WindowsBackend(BaseBackend):
                 U.TranslateMessage(C.byref(msg))
                 U.DispatchMessageW(C.byref(msg))
         except OSError:
-            self.error = "无法启动 Windows 原始鼠标输入，请重启 MouseShare"
+            self.error = tr('无法启动 Windows 原始鼠标输入，请重启 MouseShare')
         finally:
             for hook in (self.mouse_hook, self.key_hook):
                 if hook:

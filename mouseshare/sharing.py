@@ -7,11 +7,12 @@ import stat
 import tempfile
 import threading
 import time
-import uuid
 import unicodedata
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
+from .i18n import tr
 from .network import recv_exact, recv_frame
 from .protocol import ProtocolError, frame
 
@@ -29,16 +30,16 @@ def is_link(path):
 
 def safe_path(value):
     if not isinstance(value, str) or not 1 <= len(value.encode('utf-8')) <= 1024:
-        raise ProtocolError("文件路径过长")
+        raise ProtocolError(tr('文件路径过长'))
     path = PurePosixPath(value)
     parts = value.split('/')
     if path.is_absolute() or len(parts) > 32:
-        raise ProtocolError("无效文件路径")
+        raise ProtocolError(tr('无效文件路径'))
     for part in parts:
         if (part in {'', '.', '..'} or part[-1:] in {' ', '.'} or len(part.encode('utf-8')) > 240
                 or any(ord(c) < 32 or c in '<>:"\\|?*' for c in part)
                 or part.split('.')[0].upper() in RESERVED):
-            raise ProtocolError("文件名包含目标系统不支持的字符")
+            raise ProtocolError(tr('文件名包含目标系统不支持的字符'))
     return path
 
 
@@ -52,15 +53,15 @@ def manifest(paths, check=lambda: None):
         safe_path(relative)
         key = unicodedata.normalize('NFC', relative).casefold()
         if key in seen or len(entries) >= MAX_ENTRIES:
-            raise ValueError("文件名大小写冲突、重复或文件数量超过 4096")
+            raise ValueError(tr('文件名大小写冲突、重复或文件数量超过 4096'))
         seen.add(key)
         info = source.lstat()
         if is_link(source) or not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
-            raise ValueError("请传输普通文件或文件夹；链接与特殊文件需先整理")
+            raise ValueError(tr('请传输普通文件或文件夹；链接与特殊文件需先整理'))
         size = info.st_size if stat.S_ISREG(info.st_mode) else 0
         total += size
         if total > MAX_BYTES:
-            raise ValueError("单次传输总量上限为 100 GiB")
+            raise ValueError(tr('单次传输总量上限为 100 GiB'))
         entries.append(dict(path=relative, size=size, directory=stat.S_ISDIR(info.st_mode)))
         sources[relative] = (source, info.st_size, info.st_mtime_ns)
         if stat.S_ISDIR(info.st_mode):
@@ -71,41 +72,41 @@ def manifest(paths, check=lambda: None):
         path = Path(raw).absolute()
         # Parent links can change what a displayed path points at.
         if any(is_link(p) for p in [path, *path.parents]):
-            raise ValueError("请选取原始文件，避免通过符号链接发送")
+            raise ValueError(tr('请选取原始文件，避免通过符号链接发送'))
         add(path, path.name)
     if not entries:
-        raise ValueError("请选择文件或文件夹")
+        raise ValueError(tr('请选择文件或文件夹'))
     return entries, sources, total
 
 
 def validate_manifest(entries, total):
     if type(total) is not int or not 0 <= total <= MAX_BYTES or not 1 <= len(entries) <= MAX_ENTRIES:
-        raise ProtocolError("无效文件清单")
+        raise ProtocolError(tr('无效文件清单'))
     seen, directories, count = set(), set(), 0
     for entry in entries:
         if not isinstance(entry, dict):
-            raise ProtocolError("无效文件清单")
+            raise ProtocolError(tr('无效文件清单'))
         path = safe_path(entry.get('path'))
         key = unicodedata.normalize('NFC', str(path)).casefold()
         if (key in seen or type(entry.get('size')) is not int or not 0 <= entry['size'] <= MAX_BYTES
                 or type(entry.get('directory')) is not bool):
-            raise ProtocolError("文件清单冲突")
+            raise ProtocolError(tr('文件清单冲突'))
         if str(path.parent) != '.' and unicodedata.normalize('NFC', str(path.parent)).casefold() not in directories:
-            raise ProtocolError("缺少父文件夹")
+            raise ProtocolError(tr('缺少父文件夹'))
         seen.add(key)
         if entry['directory']:
             if entry['size'] != 0:
-                raise ProtocolError("无效文件夹大小")
+                raise ProtocolError(tr('无效文件夹大小'))
             directories.add(key)
         count += entry['size']
     if count != total:
-        raise ProtocolError("文件总量不匹配")
+        raise ProtocolError(tr('文件总量不匹配'))
 
 
 @dataclass
 class Transfer:
     direction: str
-    title: str = "准备文件…"
+    title: str = tr('准备文件…')
     id: str = field(default_factory=lambda: uuid.uuid4().hex)
     total: int = 0
     done: int = 0
@@ -164,7 +165,7 @@ class SharingService:
         with self.lock:
             active = [j for j in self.jobs.values() if j.status not in {'complete', 'cancelled', 'error', 'rejected'}]
             if len(active) >= 2 or job.id in self.jobs:
-                raise ValueError("已有两个传输任务，请等待完成")
+                raise ValueError(tr('已有两个传输任务，请等待完成'))
             # Keep at most 30 metadata records, never clipboard contents.
             finished = [key for key, value in self.jobs.items() if value not in active]
             for key in finished[:-28]:
@@ -185,16 +186,16 @@ class SharingService:
 
     def check(self, job):
         if job.cancelled.is_set() or not self.enabled('files'):
-            raise InterruptedError("传输已取消或共享已暂停")
+            raise InterruptedError(tr('传输已取消或共享已暂停'))
 
     def send_files(self, paths, clipboard=False, *, peer_id=None, request='', offer=''):
         session = self.network.peer_session(peer_id) if peer_id else self.network.session
         if not session or not session.connected:
-            raise ValueError('目标电脑已断开连接')
+            raise ValueError(tr('目标电脑已断开连接'))
         if session and session.connected and 'sharing-v1' not in getattr(session, 'peer_features', []):
-            raise ValueError("文件共享需要两端均升级至 v0.3.0 或更新版本")
+            raise ValueError(tr('文件共享需要两端均升级至 v0.3.0 或更新版本'))
         if not self.enabled('files'):
-            raise ValueError("文件共享已关闭，或当前处于暂停／游戏模式")
+            raise ValueError(tr('文件共享已关闭，或当前处于暂停／游戏模式'))
         job = Transfer('send', clipboard=clipboard, paths=[str(Path(p).absolute()) for p in paths],
                        peer_id=getattr(session, 'peer_id', ''), request=request, offer=offer)
         self.register(job)
@@ -207,7 +208,7 @@ class SharingService:
             self.check(job)
             names = [e['path'] for e in entries if '/' not in e['path']]
             job.title = '、'.join(names)[:160]
-            self.update(job, 'waiting', '等待对方接收')
+            self.update(job, 'waiting', tr('等待对方接收'))
 
             def work(channel):
                 channel.kind = 'files'
@@ -221,9 +222,9 @@ class SharingService:
                     sock.sendall(frame(dict(type='entry', **entry)))
                 answer = recv_frame(sock)
                 if answer.get('type') != 'accept' or answer.get('accepted') is not True:
-                    self.update(job, 'rejected', '对方拒绝接收或文件共享不可用')
+                    self.update(job, 'rejected', tr('对方拒绝接收或文件共享不可用'))
                     return
-                self.update(job, 'transferring', '正在发送')
+                self.update(job, 'transferring', tr('正在发送'))
                 last = 0
                 for entry in entries:
                     if entry['directory']:
@@ -231,18 +232,18 @@ class SharingService:
                     source, size, modified = sources[entry['path']]
                     self.check(job)
                     if any(is_link(p) for p in [source, *source.parents]):
-                        raise OSError("源文件变成了链接，请重新发送")
+                        raise OSError(tr('源文件变成了链接，请重新发送'))
                     fd = os.open(source, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_BINARY', 0))
                     with os.fdopen(fd, 'rb') as stream:
                         info = os.fstat(stream.fileno())
                         if not stat.S_ISREG(info.st_mode) or (info.st_size, info.st_mtime_ns) != (size, modified):
-                            raise OSError("源文件已变化，请重新发送")
+                            raise OSError(tr('源文件已变化，请重新发送'))
                         digest, remaining = hashlib.sha256(), size
                         while remaining:
                             self.check(job)
                             data = stream.read(min(CHUNK, remaining))
                             if not data:
-                                raise OSError("源文件已变化")
+                                raise OSError(tr('源文件已变化'))
                             sock.sendall(data)
                             digest.update(data)
                             remaining -= len(data)
@@ -252,16 +253,16 @@ class SharingService:
                                 last = time.monotonic()
                         after = os.fstat(stream.fileno())
                         if (after.st_size, after.st_mtime_ns) != (size, modified):
-                            raise OSError("源文件已变化，请重新发送")
+                            raise OSError(tr('源文件已变化，请重新发送'))
                     sock.sendall(frame(dict(type='hash', sha256=digest.hexdigest())))
                 if recv_frame(sock).get('type') != 'complete':
-                    raise OSError("对方未确认传输完成")
-                self.update(job, 'complete', '对方已接收并校验')
+                    raise OSError(tr('对方未确认传输完成'))
+                self.update(job, 'complete', tr('对方已接收并校验'))
             self.network.data_connection(work, job.peer_id) if job.peer_id else self.network.data_connection(work)
         except Exception as exc:
             if job.status != 'rejected':
                 self.update(job, 'cancelled' if job.cancelled.is_set() or isinstance(exc, InterruptedError) else 'error',
-                            str(exc) if isinstance(exc, (ValueError, OSError, InterruptedError)) else '传输失败，请重新发送')
+                            str(exc) if isinstance(exc, (ValueError, OSError, InterruptedError)) else tr('传输失败，请重新发送'))
         finally:
             job.sock = None
 
@@ -295,11 +296,11 @@ class SharingService:
                     if recv_frame(sock).get('accepted') is True and self.enabled('clipboard'):
                         sock.sendall(payload)
                         if recv_frame(sock).get('type') == 'complete':
-                            self.emit(dict(type='clipboard_status', text='剪贴板已同步'))
+                            self.emit(dict(type='clipboard_status', text=tr('剪贴板已同步')))
                 key = getattr(target, 'peer_id', '')
                 self.network.data_connection(work, key) if key else self.network.data_connection(work)
             except (OSError, ValueError):
-                self.emit(dict(type='clipboard_status', text='剪贴板同步暂不可用'))
+                self.emit(dict(type='clipboard_status', text=tr('剪贴板同步暂不可用')))
 
     def receive(self, channel):
         control = getattr(channel, 'control_session', None) or self.network.session
@@ -357,7 +358,7 @@ class SharingService:
                 sock.sendall(frame(dict(type='accept', accepted=False)))
                 return
             self.register(job)
-            self.update(job, 'offered', f'{channel.peer_name} 请求发送 {len(entries)} 项')
+            self.update(job, 'offered', tr('{p0} 请求发送 {p1} 项', p0=channel.peer_name, p1=len(entries)))
             if requested or self.settings.get('auto_receive_files', False):
                 job.approved = True
                 job.decision.set()
@@ -369,15 +370,15 @@ class SharingService:
             self.check(job)
             if not job.approved:
                 sock.sendall(frame(dict(type='accept', accepted=False)))
-                self.update(job, 'rejected', '已拒绝或接收请求已过期')
+                self.update(job, 'rejected', tr('已拒绝或接收请求已过期'))
                 return
             destination = Path(self.settings.get('receive_directory') or Path.home() / 'Downloads' / 'MouseShare')
             destination.mkdir(parents=True, exist_ok=True)
             if shutil.disk_usage(destination).free < job.total + 10 * 1024**2:
-                raise OSError("接收目录空间不足")
+                raise OSError(tr('接收目录空间不足'))
             staging = Path(tempfile.mkdtemp(prefix='.mouseshare-', dir=destination))
             sock.sendall(frame(dict(type='accept', accepted=True)))
-            self.update(job, 'transferring', '正在接收并校验')
+            self.update(job, 'transferring', tr('正在接收并校验'))
             last = 0
             for entry in entries:
                 self.check(job)
@@ -401,19 +402,19 @@ class SharingService:
                             last = time.monotonic()
                 check = recv_frame(sock)
                 if check.get('type') != 'hash' or digest.hexdigest() != check.get('sha256'):
-                    raise ProtocolError("文件校验失败，未保留不完整文件")
+                    raise ProtocolError(tr('文件校验失败，未保留不完整文件'))
             self.check(job)
             # Commit an entire batch atomically into its own unique folder.
             final = destination / (time.strftime('%Y%m%d-%H%M%S') + '-' + uuid.uuid4().hex[:8])
             staging.rename(final)
             staging = None
             job.paths = [str(final / name) for name in names]
-            self.update(job, 'complete', '接收完成，SHA-256 校验通过')
+            self.update(job, 'complete', tr('接收完成，SHA-256 校验通过'))
             sock.sendall(frame(dict(type='complete')))
         except Exception as exc:
             if job:
                 self.update(job, 'cancelled' if job.cancelled.is_set() or isinstance(exc, InterruptedError) else 'error',
-                            str(exc) if isinstance(exc, (ValueError, OSError)) else '接收失败，请重新发送')
+                            str(exc) if isinstance(exc, (ValueError, OSError)) else tr('接收失败，请重新发送'))
             raise
         finally:
             if staging:

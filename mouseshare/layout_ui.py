@@ -3,9 +3,18 @@ import copy
 
 from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QGraphicsObject,
-                               QGraphicsScene, QGraphicsView, QHBoxLayout, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import QGraphicsObject, QGraphicsScene, QHBoxLayout, QVBoxLayout
 
+from .i18n import tr
+from .i18n_widgets import (
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QGraphicsView,
+    QPushButton,
+    QWidget,
+)
 from .topology import MAX_DEVICES, Rect, default_nodes, validate_layout
 from .ui import ACCENT, ACCENT_SOFT, INK, INK_2, LINE, card, text_label
 
@@ -42,7 +51,7 @@ class DeviceNode(QGraphicsObject):
         font.setBold(False)
         painter.setFont(font)
         painter.drawText(rect.adjusted(10, 30, -10, -10), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
-                         '本机' if local else ('已连接' if active else '离线／未配对'))
+                         tr('本机') if local else (tr('已连接') if active else tr('离线／未配对')))
         painter.setBrush(QColor(ACCENT if active else '#aab5b9'))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QPointF(rect.width()-16, 16), 4, 4)
@@ -73,32 +82,32 @@ class LayoutEditor(QWidget):
         self.saving_revision = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.hint = text_label('拖动电脑屏幕，让相邻边缘接触。错位摆放按实际重叠区域跨屏。', 'hint', True)
+        self.hint = text_label(tr('拖动电脑屏幕，让相邻边缘接触。错位摆放按实际重叠区域跨屏。'), 'hint', True)
         layout.addWidget(self.hint)
         self.scene = QGraphicsScene(self)
         self.scene.selectionChanged.connect(self.selection_changed)
         self.view = DesktopView(self.scene)
-        self.view.setAccessibleName('可拖动的电脑屏幕布局')
+        self.view.setAccessibleName(tr('可拖动的电脑屏幕布局'))
         self.view.setFixedHeight(330)
         self.view.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.view.setStyleSheet('QGraphicsView {background:#eef3f4; border:1px solid #dce5e8; border-radius:12px;}')
         layout.addWidget(self.view)
         tools = QHBoxLayout()
-        for label, callback in [('适应画布', self.fit), ('＋', lambda: self.view.scale(1.2, 1.2)),
-                                ('－', lambda: self.view.scale(1/1.2, 1/1.2)), ('重置排列', self.reset_nodes),
-                                ('移出所选设备', self.remove_selected)]:
+        for label, callback in [(tr('适应画布'), self.fit), ('＋', lambda: self.view.scale(1.2, 1.2)),
+                                ('－', lambda: self.view.scale(1/1.2, 1/1.2)), (tr('重置排列'), self.reset_nodes),
+                                (tr('移出所选设备'), self.remove_selected)]:
             button = QPushButton(label)
             button.clicked.connect(callback)
             tools.addWidget(button)
         layout.addLayout(tools)
-        box, body = card('精确位置与显示大小')
+        box, body = card(tr('精确位置与显示大小'))
         form = QFormLayout()
         self.device = QComboBox()
         self.device.currentIndexChanged.connect(self.select_combo)
-        form.addRow('选择设备', self.device)
+        form.addRow(tr('选择设备'), self.device)
         self.x, self.y, self.height = QDoubleSpinBox(), QDoubleSpinBox(), QDoubleSpinBox()
-        for label, spin in [('横向位置', self.x), ('纵向位置', self.y), ('显示高度', self.height)]:
+        for label, spin in [(tr('横向位置'), self.x), (tr('纵向位置'), self.y), (tr('显示高度'), self.height)]:
             spin.setRange(-8192, 8192) if spin is not self.height else spin.setRange(64, 720)
             spin.setDecimals(1)
             spin.setSingleStep(10)
@@ -106,22 +115,21 @@ class LayoutEditor(QWidget):
             spin.valueChanged.connect(self.numeric_changed)
             form.addRow(label, spin)
         body.addLayout(form)
-        body.addWidget(text_label('显示大小用于匹配不同尺寸／缩放的电脑；不修改系统分辨率。未接触的屏幕不会跨屏。'
-                                 '每两台需要直接交接或传文件的电脑都要先完成配对。', 'hint', True))
+        body.addWidget(text_label(tr('显示大小用于匹配不同尺寸／缩放的电脑；不修改系统分辨率。未接触的屏幕不会跨屏。每两台需要直接交接或传文件的电脑都要先完成配对。'), 'hint', True))
         layout.addWidget(box)
-        self.enabled = QCheckBox('按此布局跨屏，并同步到已配对的新版本设备')
+        self.enabled = QCheckBox(tr('按此布局跨屏，并同步到已配对的新版本设备'))
         self.enabled.setChecked(True)
         self.enabled.toggled.connect(self.mark_dirty)
         layout.addWidget(self.enabled)
         row = QHBoxLayout()
-        self.save = QPushButton('保存并应用布局')
+        self.save = QPushButton(tr('保存并应用布局'))
         self.save.setObjectName('primary')
         self.save.clicked.connect(self.save_layout)
         row.addWidget(self.save)
-        reload = QPushButton('重新载入')
+        reload = QPushButton(tr('重新载入'))
         reload.clicked.connect(self.reload)
         row.addWidget(reload)
-        self.feedback = text_label('拖动后保存生效', 'hint', True)
+        self.feedback = text_label(tr('拖动后保存生效'), 'hint', True)
         row.addWidget(self.feedback, 1)
         layout.insertLayout(1, row)
         layout.removeWidget(self.enabled)
@@ -188,7 +196,7 @@ class LayoutEditor(QWidget):
     def mark_dirty(self, *args):
         self.dirty = True
         self.save.setEnabled(True)
-        self.feedback.setText('布局有未保存的更改')
+        self.feedback.setText(tr('布局有未保存的更改'))
 
     def finish_drag(self, item, old):
         node = dict(self.nodes[item.key], x=round(item.pos().x()/5)*5, y=round(item.pos().y()/5)*5)
@@ -276,15 +284,15 @@ class LayoutEditor(QWidget):
             return
         self.saving_revision = data['revision']
         self.apply_layout(data)
-        self.feedback.setText('正在应用布局…')
+        self.feedback.setText(tr('正在应用布局…'))
 
     def applied(self, data):
         if self.dirty and not (data['author'] == self.local_id and data['revision'] == self.saving_revision):
-            self.feedback.setText('另一台电脑已更新布局；当前草稿保留。可重新载入，或保存覆盖。')
+            self.feedback.setText(tr('另一台电脑已更新布局；当前草稿保留。可重新载入，或保存覆盖。'))
             return
         self.load(data)
         self.update_devices(self.metadata)
-        self.feedback.setText('布局已应用，边缘接触处可跨屏')
+        self.feedback.setText(tr('布局已应用，边缘接触处可跨屏'))
 
     def reload(self):
         data = self.settings.get('desktop_layout')

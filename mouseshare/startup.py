@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .i18n import tr
+
 
 def command():
     if getattr(sys, "frozen", False):
@@ -26,7 +28,7 @@ def set_enabled(enabled):
                     pass
     elif sys.platform == "darwin":
         if enabled and getattr(sys, "frozen", False) and not sys.executable.startswith("/Applications/"):
-            raise OSError("请先把 MouseShare 拖入「应用程序」，再开启登录启动")
+            raise OSError(tr('请先把 MouseShare 拖入「应用程序」，再开启登录启动'))
         path = Path.home() / "Library/LaunchAgents/io.github.makesail.mouseshare.plist"
         if enabled:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -51,7 +53,7 @@ def desktop_entry(args):
     # Desktop Entry Exec has its own escaping rules; no shell is involved.
     def quote(arg):
         if '\n' in arg or '\r' in arg or '\0' in arg:
-            raise OSError('启动路径包含无效字符')
+            raise OSError(tr('启动路径包含无效字符'))
         arg = arg.replace('%', '%%')
         for char in ('\\', '"', '`', '$'):
             arg = arg.replace(char, '\\' + char)

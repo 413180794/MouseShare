@@ -3,9 +3,11 @@ import ctypes as C
 import sys
 import threading
 
-from PySide6.QtCore import QObject, QThread, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import QApplication, QWidget
+
+from ..i18n import tr
 
 
 class Surface(QWidget):
@@ -47,11 +49,11 @@ class WindowsCursorShield(QObject):
             if not request['done'].wait(0.5):
                 request['cancelled'] = True
                 self.hide_requested.emit()
-                raise OSError('Windows 光标保护未就绪，已中止共享')
+                raise OSError(tr('Windows 光标保护未就绪，已中止共享'))
         else:
             self.hide_requested.emit()
         if enabled and not self.panels:
-            raise OSError(self.detail or '无法隐藏源端光标，已中止共享')
+            raise OSError(self.detail or tr('无法隐藏源端光标，已中止共享'))
 
     @Slot(object)
     def show(self, request=None):

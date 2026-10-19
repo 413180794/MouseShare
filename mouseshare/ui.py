@@ -3,10 +3,11 @@ from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPalette, QPen
-from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QProxyStyle, QPushButton, QStyle,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import QHBoxLayout, QProxyStyle, QStyle, QVBoxLayout
 
 from .branding import line_icon, pointer
+from .i18n import tr
+from .i18n_widgets import QFrame, QLabel, QPushButton, QWidget
 
 # Light palette tokens shared by the style sheet and custom painting.
 BG = "#f4f6f7"
@@ -219,7 +220,7 @@ def keycaps(keys, description):
         layout.addWidget(text_label(key, "kbd"))
     layout.addSpacing(10)
     layout.addWidget(text_label(description, "hint"), 1)
-    row.setAccessibleName(f"{' + '.join(keys)}：{description}")
+    row.setAccessibleName(tr('{keys}: {description}', keys=' + '.join(keys), description=description))
     return row
 
 
@@ -320,8 +321,8 @@ class ScreenMap(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.side = "right"
-        self.local_name = "本机"
-        self.peer_name = "等待另一台电脑"
+        self.local_name = tr('本机')
+        self.peer_name = tr('等待另一台电脑')
         self.local_os = "macOS"
         self.peer_os = ""
         self.connected = False
@@ -329,13 +330,13 @@ class ScreenMap(QWidget):
         self.game = False
         self.owner = "local"
         self.setMinimumHeight(190)
-        self.setAccessibleName("屏幕位置示意")
+        self.setAccessibleName(tr('屏幕位置示意'))
 
     def configure(self, **values):
         for key, value in values.items():
             setattr(self, key, value)
-        direction = {"left": "左侧", "right": "右侧", "top": "上方", "bottom": "下方"}[self.side]
-        self.setAccessibleDescription(f"本机 {self.local_name}；对方 {self.peer_name} 位于{direction}")
+        direction = {"left": tr('左侧'), "right": tr('右侧'), "top": tr('上方'), "bottom": tr('下方')}[self.side]
+        self.setAccessibleDescription(tr('本机 {p0}；对方 {p1} 位于{p2}', p0=self.local_name, p1=self.peer_name, p2=direction))
         self.update()
 
     def _screen(self, p, rect, active, online, stand):
@@ -448,8 +449,8 @@ class ScreenMap(QWidget):
             glyph = "link" if live else "lock" if self.game else "pause"
             line_icon(glyph, ring, 16).paint(p, QRectF(node.x() - 8, node.y() - 8, 16, 16).toRect())
         # Names: under each monitor, or beside each screen when stacked.
-        local_sub = f"{self.local_os} · 本机"
-        peer_sub = self.peer_os or ("已连接" if self.connected else "自动发现中")
+        local_sub = tr('{p0} · 本机', p0=self.local_os)
+        peer_sub = self.peer_os or (tr('已连接') if self.connected else tr('自动发现中'))
         for rect, name, sub, strong in [(local, self.local_name, local_sub, True),
                                         (peer, self.peer_name, peer_sub, self.connected)]:
             if vertical:

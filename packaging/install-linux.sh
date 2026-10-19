@@ -3,7 +3,7 @@
 set -eu
 source_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 user_root=${MOUSESHARE_INSTALL_ROOT:-"$HOME/.local"}
-version=0.5.2
+version=0.6.0
 version_dir="$user_root/opt/MouseShare-$version"
 link="$user_root/opt/MouseShare"
 marker=io.github.makesail.mouseshare

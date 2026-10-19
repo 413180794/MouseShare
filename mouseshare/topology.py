@@ -3,6 +3,8 @@ import math
 import re
 from dataclasses import dataclass
 
+from .i18n import tr
+
 MAX_DEVICES = 8
 ID = re.compile(r'[0-9a-f]{64}\Z')
 
@@ -17,13 +19,13 @@ class Rect:
     @classmethod
     def parse(cls, value):
         if not isinstance(value, dict) or set(value) != {'x', 'y', 'w', 'h'}:
-            raise ValueError('屏幕矩形格式无效')
+            raise ValueError(tr('屏幕矩形格式无效'))
         if not all(type(v) in (int, float) and math.isfinite(v) for v in value.values()):
-            raise ValueError('屏幕坐标无效')
+            raise ValueError(tr('屏幕坐标无效'))
         rect = cls(**value)
         if not (-8192 <= rect.x <= 8192 and -8192 <= rect.y <= 8192
                 and 64 <= rect.w <= 4096 and 64 <= rect.h <= 4096):
-            raise ValueError('屏幕坐标或大小超出范围')
+            raise ValueError(tr('屏幕坐标或大小超出范围'))
         return rect
 
     def data(self):
@@ -36,26 +38,26 @@ class Rect:
 
 def validate_layout(value):
     if not isinstance(value, dict) or type(value.get('enabled')) is not bool:
-        raise ValueError('布局格式无效')
+        raise ValueError(tr('布局格式无效'))
     if type(value.get('revision')) is not int or not 0 <= value['revision'] < 2**53:
-        raise ValueError('布局版本无效')
+        raise ValueError(tr('布局版本无效'))
     if not isinstance(value.get('author'), str) or not ID.fullmatch(value['author']):
-        raise ValueError('布局作者无效')
+        raise ValueError(tr('布局作者无效'))
     nodes = value.get('nodes')
     if not isinstance(nodes, dict) or not 1 <= len(nodes) <= MAX_DEVICES:
-        raise ValueError('布局最多支持八台电脑')
+        raise ValueError(tr('布局最多支持八台电脑'))
     excluded = value.get('excluded', [])
     if (not isinstance(excluded, list) or len(excluded) > 64
             or any(not isinstance(key, str) or not ID.fullmatch(key) or key in nodes for key in excluded)):
-        raise ValueError('布局排除设备无效')
+        raise ValueError(tr('布局排除设备无效'))
     rects = {}
     for key, node in nodes.items():
         if not isinstance(key, str) or not ID.fullmatch(key):
-            raise ValueError('设备标识无效')
+            raise ValueError(tr('设备标识无效'))
         rects[key] = Rect.parse(node)
     for index, a in enumerate(rects.values()):
         if any(a.overlaps(b) for b in list(rects.values())[index+1:]):
-            raise ValueError('屏幕发生重叠，请将边缘对齐后保存')
+            raise ValueError(tr('屏幕发生重叠，请将边缘对齐后保存'))
     return dict(enabled=value['enabled'], revision=value['revision'], author=value['author'],
                 nodes={key: rect.data() for key, rect in rects.items()}, excluded=excluded)
 

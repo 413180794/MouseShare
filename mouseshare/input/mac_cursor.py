@@ -1,7 +1,10 @@
 """Non-activating cursor surface, owned exclusively by the Qt GUI thread."""
-import AppKit as A
 import threading
-from PySide6.QtCore import QObject, QThread, Qt, Signal, Slot
+
+import AppKit as A
+from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
+
+from ..i18n import tr
 
 
 class MouseShareCursorPanel(A.NSPanel):
@@ -44,12 +47,12 @@ class CursorShield(QObject):
             if not request["done"].wait(0.4):
                 request["cancelled"] = True
                 self.hide_requested.emit()
-                raise OSError("Mac 光标保护窗口未就绪，已中止共享")
+                raise OSError(tr('Mac 光标保护窗口未就绪，已中止共享'))
         else:
             # Never block the event tap or GUI shutdown waiting for dismissal.
             self.hide_requested.emit()
         if enabled and not self.panels:
-            raise OSError(self.error or "无法创建 Mac 光标保护窗口，已中止共享")
+            raise OSError(self.error or tr('无法创建 Mac 光标保护窗口，已中止共享'))
 
     @Slot(object)
     def show(self, request=None):
@@ -63,7 +66,7 @@ class CursorShield(QObject):
             self.create_panels()
         except Exception as exc:
             self.hide()
-            self.error = "无法创建 Mac 光标保护窗口，已中止共享"
+            self.error = tr('无法创建 Mac 光标保护窗口，已中止共享')
             self.detail = f"{type(exc).__name__}: {exc}"
         finally:
             if request:

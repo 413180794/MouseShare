@@ -2,14 +2,15 @@
 import base64
 import hashlib
 import json
+import os
 import struct
 import sys
-import os
 
-from PySide6.QtCore import QByteArray, QBuffer, QIODevice, QMimeData, QObject, QTimer, QUrl
+from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QMimeData, QObject, QTimer, QUrl
 from PySide6.QtGui import QImage, QImageReader
 from PySide6.QtWidgets import QApplication
 
+from .i18n import tr
 from .sharing import MAX_CLIPBOARD
 
 ORIGIN = 'application/x-mouseshare-origin'
@@ -33,7 +34,7 @@ def encode_clipboard(mime, images=True, include_remote=False):
     if mime.hasFormat('x-special/gnome-copied-files'):
         data = bytes(mime.data('x-special/gnome-copied-files'))
         if len(data) > 2 * 1024**2:
-            raise ValueError('文件剪贴板过大，请分批发送')
+            raise ValueError(tr('文件剪贴板过大，请分批发送'))
         lines = data.decode('utf-8').splitlines()
         if lines and lines[0] in {'copy', 'cut'}:
             urls = [QUrl(line) for line in lines[1:] if line]
@@ -45,11 +46,11 @@ def encode_clipboard(mime, images=True, include_remote=False):
     if mime.hasHtml():
         value['html'] = mime.html()
     if sum(len(s.encode('utf-8')) for s in value.values()) > 2 * 1024**2:
-        raise ValueError('文字／富文本剪贴板上限为 2 MiB')
+        raise ValueError(tr('文字／富文本剪贴板上限为 2 MiB'))
     if images and mime.hasImage():
         image = QImage(mime.imageData())
         if image.width() * image.height() > MAX_PIXELS:
-            raise ValueError('图片上限为 1600 万像素')
+            raise ValueError(tr('图片上限为 1600 万像素'))
         buffer = QBuffer()
         buffer.open(QIODevice.OpenModeFlag.WriteOnly)
         if not image.isNull() and image.save(buffer, 'PNG'):
@@ -58,7 +59,7 @@ def encode_clipboard(mime, images=True, include_remote=False):
         return None, []
     payload = json.dumps(value, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     if len(payload) > MAX_CLIPBOARD:
-        raise ValueError('剪贴板上限为 8 MiB，请将图片保存为文件后发送')
+        raise ValueError(tr('剪贴板上限为 8 MiB，请将图片保存为文件后发送'))
     return payload, []
 
 
@@ -188,7 +189,7 @@ class ClipboardSync(QObject):
 
     def send_current(self):
         if not self.service.enabled('clipboard'):
-            self.status('请先连接电脑并开启剪贴板共享，退出游戏模式／暂停状态')
+            self.status(tr('请先连接电脑并开启剪贴板共享，退出游戏模式／暂停状态'))
             return
         try:
             payload, paths = encode_clipboard(self.clipboard.mimeData(), self.settings.get('clipboard_images', True),
@@ -201,9 +202,9 @@ class ClipboardSync(QObject):
             elif payload:
                 self.service.send_clipboard(payload)
             else:
-                self.status('当前剪贴板没有可同步内容')
+                self.status(tr('当前剪贴板没有可同步内容'))
                 return
-            self.status('已共享当前剪贴板；文件可在目标电脑按共享粘贴键接收')
+            self.status(tr('已共享当前剪贴板；文件可在目标电脑按共享粘贴键接收'))
         except (ValueError, OSError) as exc:
             self.status(str(exc))
 
@@ -213,27 +214,27 @@ class ClipboardSync(QObject):
         if payload and session is self.service.network.session:
             self.apply(payload, manual=True)
         else:
-            self.status('当前没有待应用的剪贴板；请让对方重新复制')
+            self.status(tr('当前没有待应用的剪贴板；请让对方重新复制'))
 
     def apply(self, payload, manual=False):
         if not self.service.enabled('clipboard'):
             return
         if wayland_session() and not manual:
             self.pending_remote, self.pending_session = payload, self.service.network.session
-            self.status('已收到剪贴板：请点击「应用收到的剪贴板」，再到目标应用粘贴')
+            self.status(tr('已收到剪贴板：请点击「应用收到的剪贴板」，再到目标应用粘贴'))
             return
         try:
             mime = decode_clipboard(payload, self.settings.get('clipboard_images', True))
             self.clipboard.setMimeData(mime)
             self.generation += 1
-            self.status('已收到另一台电脑的剪贴板')
+            self.status(tr('已收到另一台电脑的剪贴板'))
         except (ValueError, TypeError, UnicodeError):
-            self.status('剪贴板格式无法读取，请重新复制')
+            self.status(tr('剪贴板格式无法读取，请重新复制'))
 
     def copy_files(self, paths):
         self.clipboard.setMimeData(files_mime(paths))
         self.generation += 1
-        self.status('文件已复制，可在 Finder／资源管理器中粘贴')
+        self.status(tr('文件已复制，可在 Finder／资源管理器中粘贴'))
 
     def stop(self):
         self.timer.stop()

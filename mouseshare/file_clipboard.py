@@ -1,14 +1,15 @@
 """On-demand file clipboard. A local paste intent authorizes exactly one transfer."""
-from pathlib import Path
 import threading
 import time
 import uuid
+from pathlib import Path
 
 from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QApplication
 
 from .clipboard import wayland_session
 from .engine import peer_id, supports
+from .i18n import tr
 
 
 class FileClipboard(QObject):
@@ -58,10 +59,10 @@ class FileClipboard(QObject):
             return
         paths = [str(Path(p).absolute()) for p in paths]
         if not paths or len(paths) > 4096:
-            raise ValueError('每次最多复制 4096 个文件或文件夹')
+            raise ValueError(tr('每次最多复制 4096 个文件或文件夹'))
         names = [Path(p).name for p in paths[:12]]
         if any(not name or len(name) > 255 or any(ord(c) < 32 for c in name) for name in names):
-            raise ValueError('文件名无法共享')
+            raise ValueError(tr('文件名无法共享'))
         self.clear_local()
         self.local = dict(id=uuid.uuid4().hex, paths=paths, sequence=self.sync.sequence(), names=names)
         self.sync.last_sequence = self.sync.sequence_provider()
@@ -74,7 +75,7 @@ class FileClipboard(QObject):
         selected = self.window.network.session
         if selected and selected.connected and not supports(selected, 'file-offer-v1'):
             self.service.send_files(paths, clipboard=True)
-        self.sync.status('文件已共享：在目标窗口按 Ctrl+Alt+Shift+V 接收并粘贴')
+        self.sync.status(tr('文件已共享：在目标窗口按 Ctrl+Alt+Shift+V 接收并粘贴'))
         self.tick()
 
     def handle_event(self, event):
@@ -100,12 +101,12 @@ class FileClipboard(QObject):
         elif kind == 'file_offer' and self.allowed():
             self.offers[key] = dict(id=message['offer'], names=message['names'], stamp=time.monotonic(),
                                     eligible=True, sequence=self.sync.sequence(), session=session)
-            self.sync.status(f"{session.peer_name} 已复制 {message['count']} 项；在目标窗口按共享粘贴键")
+            self.sync.status(tr('{p0} 已复制 {p1} 项；在目标窗口按共享粘贴键', p0=session.peer_name, p1=message['count']))
         elif kind == 'file_request':
             current = self.local
             if (not self.allowed() or not current or current['id'] != message['offer']
                     or current['sequence'] != self.sync.sequence()):
-                self.send(session, dict(type='file_error', request=message['request'], message='源剪贴板已变化，请重新复制'))
+                self.send(session, dict(type='file_error', request=message['request'], message=tr('源剪贴板已变化，请重新复制')))
                 return
             try:
                 self.service.send_files(current['paths'], clipboard=True, peer_id=key,
@@ -157,21 +158,21 @@ class FileClipboard(QObject):
             if self.backend.ready() and not wayland_session() and QApplication.activeWindow() is None:
                 self.backend.clipboard_shortcut('paste')
             else:
-                self.sync.status('请先在另一台电脑复制文件')
+                self.sync.status(tr('请先在另一台电脑复制文件'))
             return
         token = uuid.uuid4().hex
         with self.lock:
             if len(self.pending) >= 2:
-                self.sync.status('已有文件正在粘贴，请等待传输完成')
+                self.sync.status(tr('已有文件正在粘贴，请等待传输完成'))
                 return
             self.pending[token] = dict(self.snapshot(), peer=peer_id(offer['session']), offer=offer['id'],
                                        claimed=False, deadline=time.monotonic()+1800)
         if not self.send(offer['session'], dict(type='file_request', offer=offer['id'], request=token)):
             with self.lock:
                 self.pending.pop(token, None)
-            self.sync.status('目标电脑已断开，请重新连接')
+            self.sync.status(tr('目标电脑已断开，请重新连接'))
         else:
-            self.sync.status('正在取回文件；保持目标窗口即可自动粘贴')
+            self.sync.status(tr('正在取回文件；保持目标窗口即可自动粘贴'))
 
     def claim(self, peer, offer, request):
         # Called by a data-channel worker; no GUI or native clipboard API here.
@@ -187,7 +188,7 @@ class FileClipboard(QObject):
         token = event.get('request')
         if token and event['direction'] == 'send' and event['status'] in {'error', 'cancelled', 'rejected'}:
             self.send(self.window.network.peer_session(event.get('peer')),
-                      dict(type='file_error', request=token, message=event.get('detail', '文件传输未完成')[:160]))
+                      dict(type='file_error', request=token, message=event.get('detail', tr('文件传输未完成'))[:160]))
             return
         if not token or event['direction'] != 'receive' or event['status'] not in {'complete', 'error', 'cancelled', 'rejected'}:
             return
@@ -197,19 +198,19 @@ class FileClipboard(QObject):
                 return
             self.pending.pop(token)
         if event['status'] != 'complete':
-            self.sync.status('文件粘贴未完成：' + event['detail'])
+            self.sync.status(tr('文件粘贴未完成：') + event['detail'])
             return
         if not self.unchanged(pending):
-            self.sync.status('文件已接收；窗口或操作已变化，可在传输记录中点「复制文件」再粘贴')
+            self.sync.status(tr('文件已接收；窗口或操作已变化，可在传输记录中点「复制文件」再粘贴'))
             return
         self.sync.copy_files(event['paths'])
         pending['sequence'] = self.sync.sequence()
         def paste():
             if self.unchanged(pending):
                 self.backend.clipboard_shortcut('paste')
-                self.sync.status('文件已送到目标窗口')
+                self.sync.status(tr('文件已送到目标窗口'))
             else:
-                self.sync.status('文件已复制到剪贴板，可在目标窗口手动粘贴')
+                self.sync.status(tr('文件已复制到剪贴板，可在目标窗口手动粘贴'))
         QTimer.singleShot(100, paste)
 
     def tick(self):

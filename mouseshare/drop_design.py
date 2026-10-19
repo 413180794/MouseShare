@@ -1,7 +1,9 @@
 """Foreground artwork for the transient glass file-drop surface."""
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QRadialGradient
-from PySide6.QtWidgets import QPushButton, QWidget
+
+from .i18n import render, tr
+from .i18n_widgets import QPushButton, QWidget
 
 
 class DropVisual(QWidget):
@@ -9,13 +11,13 @@ class DropVisual(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.target_name = '另一台电脑'
+        self.target_name = tr('另一台电脑')
         self.count, self.summary, self.state = 0, '', 'ready'
         self.blur_available = False
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.close_button = QPushButton('×', self)
-        self.close_button.setAccessibleName('取消文件投递')
+        self.close_button.setAccessibleName(tr('取消文件投递'))
         self.close_button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.close_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.close_button.setStyleSheet('QPushButton {color:#ecf7f4; background:rgba(255,255,255,16);'
@@ -25,10 +27,10 @@ class DropVisual(QWidget):
         self.close_button.clicked.connect(self.dismissed)
 
     def set_context(self, target_name, count=0, summary='', state='ready'):
-        self.target_name, self.count, self.summary = str(target_name), count, str(summary)
+        self.target_name, self.count, self.summary = target_name, count, summary
         self.state = state
-        self.close_button.setAccessibleName('关闭投递提示' if state in {'sending', 'unavailable'} else '取消文件投递')
-        self.setAccessibleName('文件投递：'+self.target_name)
+        self.close_button.setAccessibleName(tr('关闭投递提示') if state in {'sending', 'unavailable'} else tr('取消文件投递'))
+        self.setAccessibleName(tr('文件投递：')+self.target_name)
         self.update()
 
     def set_blur_available(self, available):
@@ -68,7 +70,7 @@ class DropVisual(QWidget):
             font.setBold(bold)
             painter.setFont(font)
             painter.setPen(QColor(color))
-            value = painter.fontMetrics().elidedText(value, Qt.TextElideMode.ElideRight, int(rect.width()))
+            value = painter.fontMetrics().elidedText(render(value), Qt.TextElideMode.ElideRight, int(rect.width()))
             painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, value)
 
         top = panel.top()
@@ -98,23 +100,23 @@ class DropVisual(QWidget):
         painter.drawLine(QPointF(-6, 1), QPointF(0, -5))
         painter.drawLine(QPointF(6, 1), QPointF(0, -5))
         painter.restore()
-        heading = '已开始发送' if self.state == 'sending' else '当前设备暂不可用' if self.state == 'unavailable' else (
-            '松开发送到' if self.count else '把文件拖到这里')
+        heading = tr('已开始发送') if self.state == 'sending' else tr('当前设备暂不可用') if self.state == 'unavailable' else (
+            tr('松开发送到') if self.count else tr('把文件拖到这里'))
         text(QRectF(panel.left()+24, top+164, width-48, 36), heading, 22, '#c4d8d3')
         text(QRectF(panel.left()+28, top+205, width-56, 55), self.target_name, 34, bold=True)
-        detail = self.summary or (f'{self.count} 个文件或文件夹' if self.count else '文件与文件夹 · 安全投递')
+        detail = self.summary or (tr('{p0} 个文件或文件夹', p0=self.count) if self.count else tr('文件与文件夹 · 安全投递'))
         if self.state == 'sending':
-            detail = '可返回桌面，文件在后台传输'
+            detail = tr('可返回桌面，文件在后台传输')
         elif self.state == 'unavailable':
-            detail = self.summary or '取消后重新连接设备'
+            detail = self.summary or tr('取消后重新连接设备')
         text(QRectF(panel.left()+32, top+277, width-64, 28), detail, 15, '#adcbc3')
         text(QRectF(panel.left()+20, panel.bottom()-78, width-40, 25),
-             '文件以副本发送，对方确认后接收', 13, '#8ca9a2')
+             tr('文件以副本发送，对方确认后接收'), 13, '#8ca9a2')
         painter.setBrush(QColor(80, 196, 159))
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.drawEllipse(QPointF(cx-37, panel.bottom()-31), 3, 3)
-        text(QRectF(cx-27, panel.bottom()-45, 94, 28),
-             '投递效果预览' if self.state == 'ready' else '已配对 · 加密', 12, '#a7c9bd')
+        painter.drawEllipse(QPointF(cx-79, panel.bottom()-31), 3, 3)
+        text(QRectF(cx-67, panel.bottom()-45, 158, 28),
+             tr('投递效果预览') if self.state == 'ready' else tr('已配对 · 加密'), 12, '#a7c9bd')
         # Keep cancellation reachable even on the smallest supported preview.
         baseline = min(self.height()-42, panel.bottom()+60)
         key = QRectF(cx-77, baseline-13, 43, 26)
@@ -123,4 +125,4 @@ class DropVisual(QWidget):
         painter.drawRoundedRect(key, 6, 6)
         text(key, 'Esc', 12, '#d7eae4')
         text(QRectF(cx-22, baseline-13, 99, 26),
-             '收起提示' if self.state in {'sending', 'unavailable'} else '取消投递', 13, '#adc5bd')
+             tr('收起提示') if self.state in {'sending', 'unavailable'} else tr('取消投递'), 13, '#adc5bd')

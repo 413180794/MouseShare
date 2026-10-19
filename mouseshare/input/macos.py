@@ -1,12 +1,18 @@
 """Quartz event tap on its own run loop; tagged events avoid forwarding feedback."""
 import threading
 
-import Quartz as Q
 import ApplicationServices as AX
-from CoreFoundation import (CFMachPortCreateRunLoopSource, CFRunLoopAddSource,
-                            CFRunLoopGetCurrent, CFRunLoopRunInMode, kCFRunLoopCommonModes,
-                            kCFRunLoopDefaultMode)
+import Quartz as Q
+from CoreFoundation import (
+    CFMachPortCreateRunLoopSource,
+    CFRunLoopAddSource,
+    CFRunLoopGetCurrent,
+    CFRunLoopRunInMode,
+    kCFRunLoopCommonModes,
+    kCFRunLoopDefaultMode,
+)
 
+from ..i18n import tr
 from .base import MARKER, BaseBackend
 from .keymap import HID_TO_MAC, MAC_CODES
 from .mac_cursor import CursorShield
@@ -55,7 +61,7 @@ class MacBackend(BaseBackend):
                     self._cursor_shield.set_enabled(True)
                     result = Q.CGAssociateMouseAndMouseCursorPosition(False)
                     if result != Q.kCGErrorSuccess:
-                        raise OSError(f"无法冻结 Mac 本机光标（{result}）")
+                        raise OSError(tr('无法冻结 Mac 本机光标（{p0}）', p0=result))
                 except Exception:
                     self.capture(False)
                     raise
@@ -68,11 +74,11 @@ class MacBackend(BaseBackend):
                     try:
                         result = Q.CGAssociateMouseAndMouseCursorPosition(True)
                     except Exception:
-                        self.error = "恢复 Mac 本机光标失败，请重新检查权限或重启 MouseShare"
+                        self.error = tr('恢复 Mac 本机光标失败，请重新检查权限或重启 MouseShare')
                         return
                     if result != Q.kCGErrorSuccess:
                         # Keep the flag set so stop/finally can retry restoration.
-                        self.error = f"无法恢复 Mac 本机光标（{result}），请重新检查权限"
+                        self.error = tr('无法恢复 Mac 本机光标（{p0}），请重新检查权限', p0=result)
                     else:
                         self._mouse_detached = False
 
@@ -88,7 +94,7 @@ class MacBackend(BaseBackend):
                 return event
             result = Q.CGWarpMouseCursorPosition(self._anchor)
             if result != Q.kCGErrorSuccess:
-                raise OSError(f"无法保持 Mac 光标位置（{result}）")
+                raise OSError(tr('无法保持 Mac 光标位置（{p0}）', p0=result))
             Q.CGEventSetLocation(event, self._anchor)
             Q.CGEventSetIntegerValueField(event, Q.kCGMouseEventDeltaX, 0)
             Q.CGEventSetIntegerValueField(event, Q.kCGMouseEventDeltaY, 0)
@@ -127,7 +133,7 @@ class MacBackend(BaseBackend):
             return
         self.error = ""
         if not self.permissions():
-            self.error = "需要辅助功能和输入监控权限；授权后点击重新检查"
+            self.error = tr('需要辅助功能和输入监控权限；授权后点击重新检查')
             return
         self.started.clear()
         threading.Thread(target=self.run, daemon=True, name="Quartz-input-tap").start()
@@ -144,7 +150,7 @@ class MacBackend(BaseBackend):
         self.tap = Q.CGEventTapCreate(Q.kCGHIDEventTap, Q.kCGHeadInsertEventTap,
                                      Q.kCGEventTapOptionDefault, mask, self._callback, None)
         if self.tap is None:
-            self.error = "输入监听启动失败，请检查权限并重启 MouseShare"
+            self.error = tr('输入监听启动失败，请检查权限并重启 MouseShare')
             self.started.set()
             return
         source = CFMachPortCreateRunLoopSource(None, self.tap, 0)

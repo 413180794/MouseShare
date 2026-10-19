@@ -3,12 +3,21 @@ import json
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QUrl, QSignalBlocker
+from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices, QDrag
-from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLayout,
-                               QLineEdit, QProgressBar, QPushButton, QVBoxLayout, QWidget, QSizePolicy)
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QLayout,
+    QProgressBar,
+    QSizePolicy,
+    QVBoxLayout,
+)
 
 from .clipboard import files_mime, wayland_session
+from .i18n import status_message, tr
+from .i18n_widgets import QCheckBox, QComboBox, QFrame, QLineEdit, QPushButton, QWidget
 from .ui import card, text_label
 
 
@@ -22,7 +31,7 @@ def size_text(value):
 class DropZone(QFrame):
     files = Signal(list)
 
-    def __init__(self, label='把文件或文件夹拖到这里，发送到另一台电脑', parent=None):
+    def __init__(self, label=tr('把文件或文件夹拖到这里，发送到另一台电脑'), parent=None):
         super().__init__(parent)
         self.setObjectName('card')
         self.setAcceptDrops(True)
@@ -55,10 +64,10 @@ class DropZone(QFrame):
 
 class DragFiles(QPushButton):
     def __init__(self, paths, parent=None):
-        super().__init__('拖出文件', parent)
+        super().__init__(tr('拖出文件'), parent)
         self.paths = paths
         self.start = None
-        self.setToolTip('按住拖到 Finder、资源管理器或支持文件拖放的应用')
+        self.setToolTip(tr('按住拖到 Finder、资源管理器或支持文件拖放的应用'))
 
     def mousePressEvent(self, event):
         self.start = event.position().toPoint()
@@ -87,72 +96,70 @@ class SharePanel(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
-        self.status = text_label('连接后同步新复制的内容；旧剪贴板保留在本机。', 'hint', True)
+        self.status = text_label(tr('连接后同步新复制的内容；旧剪贴板保留在本机。'), 'hint', True)
         layout.addWidget(self.status)
         row = QHBoxLayout()
-        row.addWidget(text_label('最近传输', 'section'), 1)
-        clear = QPushButton('清空记录')
+        row.addWidget(text_label(tr('最近传输'), 'section'), 1)
+        clear = QPushButton(tr('清空记录'))
         clear.clicked.connect(self.clear_history)
         row.addWidget(clear)
         layout.addLayout(row)
         self.records = QVBoxLayout()
         self.records.setSpacing(10)
         layout.addLayout(self.records)
-        self.empty = text_label('还没有传输记录。', 'hint')
+        self.empty = text_label(tr('还没有传输记录。'), 'hint')
         layout.addWidget(self.empty)
-        box, body = card('剪贴板', '在一台电脑复制，在另一台电脑粘贴。')
-        self.clipboard_enabled = QCheckBox('开启剪贴板共享（文字与富文本）')
-        self.clipboard_images = QCheckBox('同步截图和图片')
-        self.clipboard_files = QCheckBox('共享文件剪贴板：粘贴时传输文件')
-        self.native_paste = QCheckBox('支持系统粘贴键：Windows／Linux Ctrl+V，Mac ⌘V')
+        box, body = card(tr('剪贴板'), tr('在一台电脑复制，在另一台电脑粘贴。'))
+        self.clipboard_enabled = QCheckBox(tr('开启剪贴板共享（文字与富文本）'))
+        self.clipboard_images = QCheckBox(tr('同步截图和图片'))
+        self.clipboard_files = QCheckBox(tr('共享文件剪贴板：粘贴时传输文件'))
+        self.native_paste = QCheckBox(tr('支持系统粘贴键：Windows／Linux Ctrl+V，Mac ⌘V'))
         for checkbox, key in [(self.clipboard_enabled, 'clipboard_sync'), (self.clipboard_images, 'clipboard_images'),
                               (self.clipboard_files, 'clipboard_files'), (self.native_paste, 'native_file_paste')]:
             checkbox.setChecked(window.settings.get(key, True))
             checkbox.toggled.connect(lambda value, k=key: self.preference(k, value))
             body.addWidget(checkbox)
-        body.addWidget(text_label('专用快捷键：Ctrl+Alt+Shift+C 复制，Ctrl+Alt+Shift+V 粘贴。'
-                                 'Mac 对应 Control+Option+Shift+C／V。可在文件管理器中直接操作。'
-                                 '系统粘贴键仅在有新收到的文件信息时接管；文字粘贴保持原有方式。', 'hint', True))
+        body.addWidget(text_label(tr('专用快捷键：Ctrl+Alt+Shift+C 复制，Ctrl+Alt+Shift+V 粘贴。Mac 对应 Control+Option+Shift+C／V。可在文件管理器中直接操作。系统粘贴键仅在有新收到的文件信息时接管；文字粘贴保持原有方式。'), 'hint', True))
         self.clipboard_images.setEnabled(self.clipboard_enabled.isChecked())
         self.clipboard_files.setEnabled(self.clipboard_enabled.isChecked())
         actions = QHBoxLayout()
-        sync = QPushButton('同步当前剪贴板')
+        sync = QPushButton(tr('同步当前剪贴板'))
         sync.clicked.connect(lambda: window.clipboard_sync.send_current() if window.clipboard_sync else None)
         actions.addWidget(sync)
         if wayland_session():
-            apply = QPushButton('应用收到的剪贴板')
+            apply = QPushButton(tr('应用收到的剪贴板'))
             apply.clicked.connect(lambda: window.clipboard_sync.apply_pending() if window.clipboard_sync else None)
             actions.addWidget(apply)
-            body.addWidget(text_label('Wayland 会话使用前台手动同步；X11 会话可自动同步。', 'hint', True))
+            body.addWidget(text_label(tr('Wayland 会话使用前台手动同步；X11 会话可自动同步。'), 'hint', True))
         body.addLayout(actions)
         layout.addWidget(box)
-        box, body = card('文件传输', '文件与文件夹均以副本发送，接收后校验完整性。')
-        self.files_enabled = QCheckBox('开启文件共享')
+        box, body = card(tr('文件传输'), tr('文件与文件夹均以副本发送，接收后校验完整性。'))
+        self.files_enabled = QCheckBox(tr('开启文件共享'))
         self.files_enabled.setChecked(window.settings.get('file_sharing', True))
         self.files_enabled.toggled.connect(lambda value: self.preference('file_sharing', value))
         body.addWidget(self.files_enabled)
-        self.auto_receive = QCheckBox('自动接收已配对电脑的文件')
+        self.auto_receive = QCheckBox(tr('自动接收已配对电脑的文件'))
         self.auto_receive.setChecked(window.settings.get('auto_receive_files', False))
         self.auto_receive.toggled.connect(lambda value: self.preference('auto_receive_files', value))
         body.addWidget(self.auto_receive)
-        self.portal_enabled = QCheckBox('拖文件到屏幕边缘时，展开全屏毛玻璃投递层')
+        self.portal_enabled = QCheckBox(tr('拖文件到屏幕边缘时，展开全屏毛玻璃投递层'))
         self.portal_enabled.setChecked(window.settings.get('edge_drop', False))
         self.portal_enabled.toggled.connect(lambda value: self.preference('edge_drop', value))
         body.addWidget(self.portal_enabled)
-        preview = QPushButton('预览投递效果 · 3 秒')
+        preview = QPushButton(tr('预览投递效果 · 3 秒'))
         preview.clicked.connect(lambda: window.edge_portal.preview())
         body.addWidget(preview)
-        body.addWidget(text_label('平时隐藏；拖文件到相邻电脑的边缘后展开。松手提交，Esc 取消，传输在后台继续。', 'hint', True))
+        body.addWidget(text_label(tr('平时隐藏；拖文件到相邻电脑的边缘后展开。松手提交，Esc 取消，传输在后台继续。'), 'hint', True))
         self.recipient = QComboBox()
-        self.recipient.setAccessibleName('文件发送目标')
-        body.addWidget(text_label('文件发送目标', 'hint'))
+        self.recipient.setAccessibleName(tr('文件发送目标'))
+        body.addWidget(text_label(tr('文件发送目标'), 'hint'))
         body.addWidget(self.recipient)
         self.drop = DropZone()
         self.drop.files.connect(self.send)
         body.addWidget(self.drop)
         row = QHBoxLayout()
-        for title, action in [('选择文件', self.choose_files), ('选择文件夹', self.choose_directory),
-                              ('发送已复制的文件', self.send_copied)]:
+        for title, action in [(tr('选择文件'), self.choose_files), (tr('选择文件夹'), self.choose_directory),
+                              (tr('发送已复制的文件'), self.send_copied)]:
             button = QPushButton(title)
             button.clicked.connect(action)
             row.addWidget(button)
@@ -160,16 +167,16 @@ class SharePanel(QWidget):
         row = QHBoxLayout()
         self.directory = QLineEdit(str(self.receive_directory()))
         self.directory.setReadOnly(True)
-        self.directory.setAccessibleName('接收目录')
+        self.directory.setAccessibleName(tr('接收目录'))
         row.addWidget(self.directory, 1)
-        change = QPushButton('更改目录')
+        change = QPushButton(tr('更改目录'))
         change.clicked.connect(self.choose_destination)
         row.addWidget(change)
-        open_folder = QPushButton('打开')
+        open_folder = QPushButton(tr('打开'))
         open_folder.clicked.connect(self.open_destination)
         row.addWidget(open_folder)
         body.addLayout(row)
-        body.addWidget(text_label('每批保存到独立文件夹，保留同名文件。单次最多 100 GiB／4096 项。', 'hint', True))
+        body.addWidget(text_label(tr('每批保存到独立文件夹，保留同名文件。单次最多 100 GiB／4096 项。'), 'hint', True))
         layout.addWidget(box)
         try:
             history = json.loads(self.history_path.read_text())
@@ -184,7 +191,7 @@ class SharePanel(QWidget):
         selected = self.recipient.currentData()
         blocker = QSignalBlocker(self.recipient)
         self.recipient.clear()
-        self.recipient.addItem('当前控制／选中的电脑', '')
+        self.recipient.addItem(tr('当前控制／选中的电脑'), '')
         for key, session in list(self.window.network.sessions.items()):
             if session.connected and 'sharing-v1' in getattr(session, 'peer_features', []):
                 self.recipient.addItem(session.peer_name, key)
@@ -200,7 +207,7 @@ class SharePanel(QWidget):
         if key == 'clipboard_sync':
             self.clipboard_images.setEnabled(value)
             self.clipboard_files.setEnabled(value)
-        self.status.setText('共享偏好已保存')
+        self.status.setText(tr('共享偏好已保存'))
         self.drop.setEnabled(self.window.sharing_allowed('files') and self.window.settings.get('file_sharing', True))
 
     def receive_directory(self):
@@ -215,15 +222,15 @@ class SharePanel(QWidget):
             self.status.setText(str(exc))
 
     def choose_destination(self):
-        directory = QFileDialog.getExistingDirectory(self, '选择接收目录', str(self.receive_directory()))
+        directory = QFileDialog.getExistingDirectory(self, tr('选择接收目录'), str(self.receive_directory()))
         if directory:
             self.window.settings.set(receive_directory=directory)
             self.directory.setText(directory)
-            self.status.setText('接收目录已保存；正在接收的任务继续使用原目录')
+            self.status.setText(tr('接收目录已保存；正在接收的任务继续使用原目录'))
 
     def send(self, paths, clipboard=False):
         if self.window.demo:
-            self.status.setText('演示界面：实际传输将在双机连接后启用')
+            self.status.setText(tr('演示界面：实际传输将在双机连接后启用'))
             return
         try:
             self.service.send_files(paths, clipboard, peer_id=self.recipient.currentData() or None)
@@ -231,12 +238,12 @@ class SharePanel(QWidget):
             self.status.setText(str(exc))
 
     def choose_files(self):
-        paths, _ = QFileDialog.getOpenFileNames(self, '选择要发送的文件')
+        paths, _ = QFileDialog.getOpenFileNames(self, tr('选择要发送的文件'))
         if paths:
             self.send(paths)
 
     def choose_directory(self):
-        path = QFileDialog.getExistingDirectory(self, '选择要发送的文件夹')
+        path = QFileDialog.getExistingDirectory(self, tr('选择要发送的文件夹'))
         if path:
             self.send([path])
 
@@ -245,7 +252,7 @@ class SharePanel(QWidget):
         if paths:
             self.send(paths, clipboard=True)
         else:
-            self.status.setText('请先在 Finder 或资源管理器中复制文件')
+            self.status.setText(tr('请先在 Finder 或资源管理器中复制文件'))
 
     def transfer(self, event, persist=True):
         key = event['job']
@@ -269,12 +276,13 @@ class SharePanel(QWidget):
             self.records.insertWidget(0, box)
             self.rows[key] = (box, title, detail, progress, buttons)
         box, title, detail, progress, buttons = self.rows[key]
-        title.setText(('发送 · ' if event['direction'] == 'send' else '接收 · ') + event['title'])
-        detail.setText(event['detail'] + f"  {size_text(event['done'])} / {size_text(event['total'])}")
+        title.setText((tr('发送 · ') if event['direction'] == 'send' else tr('接收 · ')) + event['title'])
+        description = status_message(event['detail']) + f"  {size_text(event['done'])} / {size_text(event['total'])}"
         if event['status'] == 'transferring' and event.get('speed'):
             speed = event['speed']
             eta = max(0, int((event['total'] - event['done']) / speed))
-            detail.setText(detail.text() + f' · {size_text(speed)}/s · 剩余约 {eta} 秒')
+            description += tr(' · {p0}/s · 剩余约 {p1} 秒', p0=size_text(speed), p1=eta)
+        detail.setText(description)
         progress.setValue(int(event['done'] / max(1, event['total']) * 1000))
         progress.setVisible(event['status'] in {'preparing', 'waiting', 'offered', 'transferring'})
         if previous and previous['status'] == event['status']:
@@ -290,16 +298,16 @@ class SharePanel(QWidget):
             buttons.addWidget(item)
         status = event['status']
         if status == 'offered':
-            button('接收', lambda: self.service.decide(key, True))
-            button('拒绝', lambda: self.service.decide(key, False))
+            button(tr('接收'), lambda: self.service.decide(key, True))
+            button(tr('拒绝'), lambda: self.service.decide(key, False))
         elif status in {'preparing', 'waiting', 'transferring'}:
-            button('取消', lambda: self.service.cancel(key))
+            button(tr('取消'), lambda: self.service.cancel(key))
         elif status in {'error', 'cancelled', 'rejected'} and event['direction'] == 'send' and event.get('paths'):
-            button('重新发送', lambda: self.send(event['paths'], event.get('clipboard', False)))
+            button(tr('重新发送'), lambda: self.send(event['paths'], event.get('clipboard', False)))
         elif status == 'complete' and event['direction'] == 'receive' and event.get('paths'):
             paths = event['paths']
-            button('打开所在文件夹', lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(paths[0]).parent))))
-            button('复制文件', lambda: self.window.clipboard_sync.copy_files(paths))
+            button(tr('打开所在文件夹'), lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(paths[0]).parent))))
+            button(tr('复制文件'), lambda: self.window.clipboard_sync.copy_files(paths))
             buttons.addWidget(DragFiles(paths))
             if (persist and not wayland_session() and previous and previous['status'] != 'complete' and event.get('clipboard')
                     and not event.get('request')
@@ -309,7 +317,7 @@ class SharePanel(QWidget):
                 self.window.clipboard_sync.copy_files(paths)
         self.empty.setVisible(not self.rows)
         pending = sum(e['status'] == 'offered' for e in self.events.values())
-        self.window.nav_group.button(3).setText(f'文件待接收 ({pending})' if pending else '文件与剪贴板')
+        self.window.nav_group.button(3).setText(tr('文件待接收 ({p0})', p0=pending) if pending else tr('文件与剪贴板'))
         if persist and status in {'complete', 'error', 'cancelled', 'rejected'}:
             self.save_history()
         for old in list(self.rows)[:-30]:
@@ -317,9 +325,9 @@ class SharePanel(QWidget):
                 self.rows.pop(old)[0].deleteLater()
                 self.events.pop(old)
         if persist and status == 'offered' and (not previous or previous['status'] != 'offered'):
-            self.window.tray.showMessage('收到文件请求', event['title'] + ' · 打开“文件与剪贴板”接收')
+            self.window.tray.showMessage(tr('收到文件请求'), event['title'] + tr(' · 打开“文件与剪贴板”接收'))
         if persist and status == 'complete' and (not previous or previous['status'] != 'complete'):
-            self.window.tray.showMessage('文件传输完成', event['title'])
+            self.window.tray.showMessage(tr('文件传输完成'), event['title'])
 
     def save_history(self):
         history = [e for e in reversed(list(self.events.values()))
@@ -331,7 +339,7 @@ class SharePanel(QWidget):
                 temp.chmod(0o600)
             temp.replace(self.history_path)
         except OSError:
-            self.status.setText('传输记录暂时无法保存')
+            self.status.setText(tr('传输记录暂时无法保存'))
 
     def clear_history(self):
         for key in list(self.rows):

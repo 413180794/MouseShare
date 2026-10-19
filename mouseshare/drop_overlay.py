@@ -1,13 +1,15 @@
 """Transient desktop file drop: invisible while idle, bound to an authenticated peer."""
-from pathlib import Path
 import time
+from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, QRect, Qt, QTimer
 from PySide6.QtGui import QColor, QPainter
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication
 
 from .backdrop import Backdrop
 from .drop_design import DropVisual
+from .i18n import tr
+from .i18n_widgets import QWidget
 from .topology import Rect
 
 EDGE_WIDTH = 14
@@ -69,7 +71,7 @@ class EdgeSensor(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setWindowTitle('MouseShare 拖放感应区')
+        self.setWindowTitle(tr('MouseShare 拖放感应区'))
         self.setAcceptDrops(True)
         self.setGeometry(geometry)
 
@@ -107,7 +109,7 @@ class DropSurface(QWidget):
     def __init__(self, owner):
         super().__init__(None, FLAGS)
         self.owner = owner
-        self.setWindowTitle('MouseShare · 文件投递')
+        self.setWindowTitle(tr('MouseShare · 文件投递'))
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -283,9 +285,9 @@ class EdgePortal(QObject):
         names = [Path(path).name for path in paths[:2]]
         summary = ' · '.join(names)
         if len(paths) > 2:
-            summary += f' 等 {len(paths)} 项'
+            summary += tr(' 等 {p0} 项', p0=len(paths))
         elif len(paths) > 1:
-            summary = f'{len(paths)} 项 · '+summary
+            summary = tr('{p0} 项 · ', p0=len(paths))+summary
         self.surface.visual.set_context(self.session.peer_name, len(paths), summary, 'hover')
 
     def submit(self, session, paths):
@@ -296,7 +298,7 @@ class EdgePortal(QObject):
         try:
             self.window.sharing.send_files(paths, peer_id=session.peer_id)
             self.surface.visual.set_context(session.peer_name, len(paths), state='sending')
-            self.window.share_panel.status.setText('已提交文件，传输进度显示在下方记录中')
+            self.window.share_panel.status.setText(tr('已提交文件，传输进度显示在下方记录中'))
         except (OSError, ValueError) as exc:
             self.window.share_panel.status.setText(str(exc))
             self.surface.visual.set_context(session.peer_name, summary=str(exc), state='unavailable')
@@ -319,8 +321,8 @@ class EdgePortal(QObject):
         self.previewing, self.active = True, True
         self.preview_deadline = time.monotonic()+3
         session = self.window.network.session
-        name = session.peer_name if session and session.connected else '另一台电脑'
-        self.surface.visual.set_context(name, summary='预览 · 3 秒后自动收起')
+        name = session.peer_name if session and session.connected else tr('另一台电脑')
+        self.surface.visual.set_context(name, summary=tr('预览 · 3 秒后自动收起'))
         self.surface.present(screen.geometry())
 
     def eventFilter(self, watched, event):
@@ -367,7 +369,7 @@ def run_preview(app, smoke=False):
     from types import SimpleNamespace
     host = QWidget()
     host.demo = True
-    host.network = SimpleNamespace(session=SimpleNamespace(peer_name='Windows 台式机', connected=True))
+    host.network = SimpleNamespace(session=SimpleNamespace(peer_name=tr('Windows 台式机'), connected=True))
     controller = EdgePortal(host)
     controller.preview()
     controller.preview_deadline = time.monotonic()+12

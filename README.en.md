@@ -6,20 +6,24 @@ Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux 
 
 [Download](https://github.com/413180794/MouseShare/releases) · [Builds](https://github.com/413180794/MouseShare/actions) · [Acceptance checklist](docs/ACCEPTANCE.md)
 
-**v0.5.2 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available. The application UI is currently primarily Simplified Chinese.
+**v0.6.0 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available.
 
-![Connection UI with isolated sample devices](docs/screenshot.png)
+![English connection UI with isolated sample devices](docs/screenshot.en.png)
+
+## Language
+
+The app supports **English and Simplified Chinese** on Windows, macOS and Linux. It follows the system language on first launch (Chinese locales use Simplified Chinese; other locales use English). Choose **Preferences → Local preferences → Language** to override it. Changes take effect immediately and are remembered on this computer, while connections, transfers and unsaved settings remain in place. Help opens the matching README. macOS system permission prompts follow the system language.
 
 ## Install
 
 | Platform | Package | Installation |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.5.2-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
-| Windows portable | `MouseShare-0.5.2-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
-| Apple Silicon, macOS 13+ | `MouseShare-0.5.2-macOS-arm64.dmg` | Drag the app into Applications |
-| Intel, macOS 13+ | `MouseShare-0.5.2-macOS-x86_64.dmg` | Drag the app into Applications |
-| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.5.2-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
-| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.5.2-Linux-arm64.deb` or `.tar.gz` | Same as above |
+| Windows 10/11 x64 | `MouseShare-0.6.0-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
+| Windows portable | `MouseShare-0.6.0-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
+| Apple Silicon, macOS 13+ | `MouseShare-0.6.0-macOS-arm64.dmg` | Drag the app into Applications |
+| Intel, macOS 13+ | `MouseShare-0.6.0-macOS-x86_64.dmg` | Drag the app into Applications |
+| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.6.0-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
+| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.6.0-Linux-arm64.deb` or `.tar.gz` | Same as above |
 
 Packages include Python and Qt. Linux still requires X11/Qt system libraries; the DEB declares these dependencies. The portable archive includes a user-level `install.sh` that adds a menu entry and preserves older version directories. See [Linux instructions](docs/INSTALL-Linux.txt).
 
@@ -36,7 +40,7 @@ sudo apt install libx11-6 libxi6 libxtst6 libxfixes3 libxrandr2 libxss1 \
 
 ### macOS permissions
 
-The first launch opens a guide when permissions are missing. Open it later from **系统权限** (System Permissions). Each step requests its corresponding native permission, opens the correct settings page, and checks the status when you return:
+The first launch opens a guide when permissions are missing. Open it later from **System permissions**. Each step requests its corresponding native permission, opens the correct settings page, and checks the status when you return:
 
 1. **Accessibility** allows MouseShare to control the keyboard and mouse.
 2. **Input Monitoring** allows it to read physical input for forwarding.
@@ -44,20 +48,20 @@ The first launch opens a guide when permissions are missing. Open it later from 
 
 Enable MouseShare in System Settings → Privacy & Security. Use `+` to add `/Applications/MouseShare.app` if missing. Complete OS authentication yourself, and quit/reopen if macOS asks. Replacing an ad hoc signed preview may require refreshing these grants.
 
-![Permission guide with sample states](docs/permissions.png)
+![Permission guide with sample states](docs/permissions.en.png)
 
 ### Linux sessions
 
 Full input sharing requires an **X11/Xorg** session and runs as the logged-in desktop user. Root access, membership in the `input` group and `xhost` changes are unnecessary. Linux uses XInput2 raw events, XTEST injection and active grabs to keep the source cursor at its handoff position.
 
-On **Wayland**, this release offers file transfer and foreground clipboard buttons: **同步当前剪贴板** (Send current clipboard) and **应用收到的剪贴板** (Apply received clipboard). For full keyboard/mouse sharing, log out and choose Ubuntu on Xorg or Plasma (X11) in your login session menu. Native Wayland input portals remain future work.
+On **Wayland**, this release offers file transfer and foreground clipboard buttons: **Sync current clipboard** and **Apply received clipboard**. For full keyboard/mouse sharing, log out and choose Ubuntu on Xorg or Plasma (X11) in your login session menu. Native Wayland input portals remain future work.
 
 ## Pair your computers
 
 1. Connect both computers to the same trusted LAN and start MouseShare.
-2. On **设备连接** (Devices), select the nearby computer and choose Pair and Connect. Discovery uses multicast and broadcast.
+2. On **Devices**, select the nearby computer and choose Pair and connect. Discovery uses multicast and broadcast.
 3. **Compare the six-digit code on both computers and approve on both.** Only approve connections you intended. The certificate fingerprint is remembered for reconnection.
-4. Open **屏幕布局** (Screen Layout). Drag computer rectangles to match your desk, join the desired edges, then save. Offsets and relative screen sizes are editable. Layouts synchronize to paired v0.5.0+ participants; the original two-computer direction setting is available when layout mode is disabled.
+4. Open **Screen layout**. Drag computer rectangles to match your desk, join the desired edges, then save. Offsets and relative screen sizes are editable. Layouts synchronize to paired v0.5.0+ participants; the original two-computer direction setting is available when layout mode is disabled.
 5. Move to an overlapping shared edge and wait 180 ms by default. Input can continue A→B→C and back through the arrangement. Gaps, uncovered edges and offline neighbors stop the pointer. Up to eight computers are supported; independently pair every two computers that need direct control or file transfers.
 
 If discovery is unavailable, expand Connect by IP and enter the other computer's IPv4 address. Allow **UDP 24871 and TCP 24872** on your trusted LAN. The Windows installer offers inbound rules restricted to the local subnet on private networks. Guest Wi-Fi isolation, VPNs, different subnets and firewalls can affect discovery.
@@ -73,7 +77,7 @@ Game mode keeps physical input on this computer and pauses sharing in both direc
 
 Windows automatically protects foreground fullscreen windows and named game executables. The defaults include Delta Force, League of Legends/TFT, VALORANT, CS2, PUBG, Apex, Fortnite, Overwatch, NARAKA, Genshin Impact, Honkai: Star Rail, Zenless Zone Zero, Marvel Rivals, Black Myth: Wukong, ARC Raiders, Battlefield 6 and more. See the [complete editable catalog](docs/GAMES.md).
 
-The original three-entry stock list upgrades automatically. Custom lists are preserved; **补齐热门游戏名单** adds missing popular defaults without deleting your entries. Save to apply. Names are exact foreground executable basenames, matched case-insensitively. Launchers and generic Java processes are excluded.
+The original three-entry stock list upgrades automatically. Custom lists are preserved; **Add popular games** adds missing popular defaults without deleting your entries. Save to apply. Names are exact foreground executable basenames, matched case-insensitively. Launchers and generic Java processes are excluded.
 
 Fullscreen videos also trigger fullscreen protection. You can disable that option while retaining game-process detection. macOS and Linux currently offer manual game mode. If an automatic condition remains active, turning off manual mode keeps protection enabled and shows the reason. Individual anticheat systems and games still require device testing.
 
@@ -92,9 +96,9 @@ Transfers show progress, speed and estimated time, support cancellation/re-send,
 - Native continuous file dragging across screen edges remains future work. The current flow uses the glass drop surface, transfer, then local drag-out. macOS and Windows 11 request native compositor blur; other desktops and reduced-transparency settings use a dark translucent fallback. No screen capture or Screen Recording permission is required.
 - Content sharing is compatible with v0.3.0+; Linux requires v0.4.0+; multi-computer layouts and on-demand file paste require v0.5.0+ on participating devices. Wayland uses explicit foreground clipboard actions, and received files are copied through the record's Copy Files button.
 
-![File sharing UI with sample transfer data](docs/sharing.png)
+![File sharing UI with sample transfer data](docs/sharing.en.png)
 
-![Full-screen drop surface with sample data; the compositor renders the actual backdrop](docs/drop-overlay.png)
+![Full-screen drop surface with sample data; the compositor renders the actual backdrop](docs/drop-overlay.en.png)
 
 ## Everyday use and limits
 
@@ -104,7 +108,7 @@ Physical keyboard positions use USB HID IDs; the receiver's layout and IME produ
 
 Each instance connects to up to seven peers and uses its primary monitor as the sharing boundary. The source cursor hides during forwarding and restores on return or failure. The receiver has an optional colored pointer ring. Independent topology for multiple monitors on one computer, continuous native cross-computer file dragging, resumable transfers, video streaming and Windows ARM packages remain future work. Login/lock screens, UAC secure desktops, macOS Secure Input and elevated target applications can restrict injection. See [Microsoft's SendInput restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput).
 
-![Draggable layout with sample devices](docs/layout.png)
+![Draggable layout with sample devices](docs/layout.en.png)
 
 ## Local data and security
 

@@ -23,7 +23,7 @@ def app():
 @pytest.fixture
 def window(app, tmp_path):
     settings = Settings(tmp_path)
-    settings.set(peers={"a" * 64: {"name": "Paired PC", "host": "192.168.1.20", "port": 24872}})
+    settings.set(language='zh_CN', peers={"a" * 64: {"name": "Paired PC", "host": "192.168.1.20", "port": 24872}})
     window = MainWindow(settings, Identity(tmp_path), demo=True)
     yield window
     window.shutdown()

@@ -1,12 +1,12 @@
-MouseShare v0.5.2 · 全屏毛玻璃文件投递 / Full-screen glass file drop
+MouseShare v0.6.0 · 中英文界面 / English and Simplified Chinese
 
-- 用全屏临时投递层替换常驻边缘小窗：平时隐藏，拖本地文件到布局中已连接的电脑边缘时展开，显示目标设备、文件信息和 Esc 取消提示。
-- 松手提交后迅速收起，传输继续在后台进行；保留对端接收确认、目录副本和 SHA-256 校验。支持本机鼠标及远端键鼠控制中的文件拖放。
-- Mac 使用系统原生模糊，Windows 11 使用 Desktop Acrylic，其他桌面按合成器能力提供模糊或深色半透明背景。尊重减少透明度设置，不需要屏幕录制权限。
-- 提供 3 秒效果预览；取消、断线、游戏保护、暂停和控制会话变化时收起。投递目标绑定进入浮层时的认证连接，避免切换选中设备后发错电脑。
+- Windows、macOS、Linux 软件界面全面支持简体中文和英文，覆盖连接、配对、权限引导、游戏模式、屏幕布局、托盘菜单、剪贴板、文件传输和全屏投递层。
+- 首次启动跟随系统语言；在「共享设置 → 本机偏好 → 界面语言」选择「跟随系统」「简体中文」或「English」。选择立即生效并自动保存，当前连接、传输任务与设置草稿保留。
+- 帮助入口按界面语言打开中文或英文 README。补齐英文界面截图、安装说明，以及 macOS 系统授权描述的中英文资源。
+- 设备名称、文件名、剪贴板内容、游戏进程名和协议字段保持原值，兼容已配对设备与现有设置。
 
-The persistent edge tab is replaced by a transient full-screen glass drop surface. Drag local files to a connected screen edge, check the destination, then release to send or press Esc to cancel. The desktop returns while transfer continues in the background. Local and remotely controlled file drags are supported. Native compositor blur is requested on supported desktops, with a dark translucent fallback and respect for reduced-transparency settings. No desktop screenshots or Screen Recording permission are needed.
+English and Simplified Chinese are now available throughout the app on Windows, macOS and Linux, including pairing, permissions, game mode, layouts, tray menus, clipboard, transfers and the full-screen file-drop surface.
 
-沿用 v0.5.x 多机拖动布局、源端光标隐藏、四色接收光圈和文件复制粘贴。原生连续跨电脑拖动到任意应用仍使用“投递 → 接收 → 本机拖出”的交接方式。Linux 全局键鼠／边缘拖动使用 X11；Wayland 保留软件内文件投递和手动剪贴板入口。Windows、macOS arm64／Intel、Linux x64／ARM64 包均包含运行依赖。
+The initial language follows your system locale. Choose Preferences → Local preferences → Language to switch immediately; your selection is remembered while connections, transfers and unsaved settings remain in place. Help opens the matching README. Device names, filenames and clipboard content stay unchanged. macOS permission prompts use the operating system's language.
 
-预览版尚无商业代码签名或 Apple 公证。请核对 SHA256SUMS.txt；平台与实体文件管理器的拖动表现需实机验收。
+Windows x64 Setup/portable ZIP, macOS arm64/Intel DMGs, and Linux x64/ARM64 DEB/portable archives include the runtime. This preview uses ad hoc signing on macOS and has no commercial code signature or Apple notarization. Verify SHA256SUMS.txt. Linux native input requires X11; Wayland keeps file transfer and manual foreground clipboard actions. Physical Linux hardware remains untested.
