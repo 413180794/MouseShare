@@ -12,7 +12,7 @@ from CoreFoundation import (
     kCFRunLoopDefaultMode,
 )
 
-from ..i18n import tr
+from ..i18n import exception_text, tr
 from .base import MARKER, BaseBackend
 from .keymap import HID_TO_MAC, MAC_CODES
 from .mac_cursor import CursorShield
@@ -221,7 +221,7 @@ class MacBackend(BaseBackend):
                 return event
         except Exception as exc:
             if isinstance(exc, OSError):
-                self.error = str(exc)
+                self.error = exception_text(exc)
             self.capture(False)
             self.emit({"type": "command", "action": "panic"})
             return event

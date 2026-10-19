@@ -54,6 +54,11 @@ def tr(source, **values):
     return Message(source, values)
 
 
+def exception_text(exc):
+    """Preserve an app-authored exception message until the GUI renders it."""
+    return exc.args[0] if exc.args and isinstance(exc.args[0], Message) else str(exc)
+
+
 def status_message(value):
     """Recover catalog-owned transfer statuses from older local history records."""
     if isinstance(value, Message):

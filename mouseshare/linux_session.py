@@ -2,7 +2,7 @@
 import os
 import time
 
-from PySide6.QtCore import QObject, QTimer, SLOT, Slot
+from PySide6.QtCore import SLOT, QObject, QTimer, Slot
 from PySide6.QtDBus import QDBus, QDBusConnection, QDBusMessage, QDBusVariant
 
 

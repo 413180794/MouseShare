@@ -5,7 +5,7 @@ import os
 import select
 import threading
 
-from ..i18n import tr
+from ..i18n import exception_text, tr
 from .base import ALT, CTRL, BaseBackend
 from .keymap import WIN_SCANS
 
@@ -278,7 +278,7 @@ class LinuxBackend(BaseBackend):
                 elif not x.XPending(self.display):
                     select.select([fd], [], [], 0.02)
         except Exception as exc:
-            self.error = str(exc) if isinstance(exc, OSError) else tr('X11 输入监听已安全停止，请重新检查')
+            self.error = exception_text(exc) if isinstance(exc, OSError) else tr('X11 输入监听已安全停止，请重新检查')
             self.emit({'type': 'command', 'action': 'panic'})
         finally:
             self.running = False

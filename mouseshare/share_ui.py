@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from .clipboard import files_mime, wayland_session
-from .i18n import status_message, tr
+from .i18n import exception_text, status_message, tr
 from .i18n_widgets import QCheckBox, QComboBox, QFrame, QLineEdit, QPushButton, QWidget
 from .ui import card, text_label
 
@@ -219,7 +219,7 @@ class SharePanel(QWidget):
             directory.mkdir(parents=True, exist_ok=True)
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(directory)))
         except OSError as exc:
-            self.status.setText(str(exc))
+            self.status.setText(exception_text(exc))
 
     def choose_destination(self):
         directory = QFileDialog.getExistingDirectory(self, tr('选择接收目录'), str(self.receive_directory()))
@@ -235,7 +235,7 @@ class SharePanel(QWidget):
         try:
             self.service.send_files(paths, clipboard, peer_id=self.recipient.currentData() or None)
         except (OSError, ValueError) as exc:
-            self.status.setText(str(exc))
+            self.status.setText(exception_text(exc))
 
     def choose_files(self):
         paths, _ = QFileDialog.getOpenFileNames(self, tr('选择要发送的文件'))

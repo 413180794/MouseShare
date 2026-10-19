@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QApplication
 
 from .clipboard import wayland_session
 from .engine import peer_id, supports
-from .i18n import tr
+from .i18n import exception_text, tr
 
 
 class FileClipboard(QObject):
@@ -112,7 +112,7 @@ class FileClipboard(QObject):
                 self.service.send_files(current['paths'], clipboard=True, peer_id=key,
                                         request=message['request'], offer=message['offer'])
             except (ValueError, OSError) as exc:
-                self.send(session, dict(type='file_error', request=message['request'], message=str(exc)[:160]))
+                self.send(session, dict(type='file_error', request=message['request'], message=exception_text(exc)[:160]))
         elif kind == 'file_error':
             with self.lock:
                 pending = self.pending.get(message['request'])

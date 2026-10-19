@@ -12,7 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from .i18n import tr
+from .i18n import exception_text, tr
 from .network import recv_exact, recv_frame
 from .protocol import ProtocolError, frame
 
@@ -262,7 +262,7 @@ class SharingService:
         except Exception as exc:
             if job.status != 'rejected':
                 self.update(job, 'cancelled' if job.cancelled.is_set() or isinstance(exc, InterruptedError) else 'error',
-                            str(exc) if isinstance(exc, (ValueError, OSError, InterruptedError)) else tr('传输失败，请重新发送'))
+                            exception_text(exc) if isinstance(exc, (ValueError, OSError, InterruptedError)) else tr('传输失败，请重新发送'))
         finally:
             job.sock = None
 
@@ -414,7 +414,7 @@ class SharingService:
         except Exception as exc:
             if job:
                 self.update(job, 'cancelled' if job.cancelled.is_set() or isinstance(exc, InterruptedError) else 'error',
-                            str(exc) if isinstance(exc, (ValueError, OSError)) else tr('接收失败，请重新发送'))
+                            exception_text(exc) if isinstance(exc, (ValueError, OSError)) else tr('接收失败，请重新发送'))
             raise
         finally:
             if staging:

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication
 
 from .backdrop import Backdrop
 from .drop_design import DropVisual
-from .i18n import tr
+from .i18n import exception_text, tr
 from .i18n_widgets import QWidget
 from .topology import Rect
 
@@ -300,8 +300,8 @@ class EdgePortal(QObject):
             self.surface.visual.set_context(session.peer_name, len(paths), state='sending')
             self.window.share_panel.status.setText(tr('已提交文件，传输进度显示在下方记录中'))
         except (OSError, ValueError) as exc:
-            self.window.share_panel.status.setText(str(exc))
-            self.surface.visual.set_context(session.peer_name, summary=str(exc), state='unavailable')
+            self.window.share_panel.status.setText(exception_text(exc))
+            self.surface.visual.set_context(session.peer_name, summary=exception_text(exc), state='unavailable')
         token = self.enter_generation
         QTimer.singleShot(450, lambda: self.cancel() if self.enter_generation == token else None)
         return True

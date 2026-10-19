@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QAbstractButton, QApplication, QComboBox, QLabel, 
 
 from mouseshare.app import Bridge, MainWindow
 from mouseshare.config import Settings
-from mouseshare.i18n import Message, language, resolve_language, set_language, tr
+from mouseshare.i18n import Message, exception_text, language, resolve_language, set_language, tr
 from mouseshare.i18n_widgets import retranslate_widgets
 from mouseshare.permissions import PermissionGuide
 from mouseshare.security import Identity
@@ -35,10 +35,10 @@ def test_locale_resolution(preference, system, expected):
 
 
 def test_catalog_is_complete_and_placeholders_match():
-    catalog = json.loads((ROOT/'mouseshare/locales/en.json').read_text())
+    catalog = json.loads((ROOT/'mouseshare/locales/en.json').read_text(encoding='utf-8'))
     sources = set()
     for path in (ROOT/'mouseshare').rglob('*.py'):
-        tree = ast.parse(path.read_text())
+        tree = ast.parse(path.read_text(encoding='utf-8'))
         for node in ast.walk(tree):
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'tr':
                 if node.args and isinstance(node.args[0], ast.Constant) and HAN.search(str(node.args[0].value)):
@@ -58,6 +58,14 @@ def test_nested_messages_retranslate_without_touching_parameter_content():
     assert message.render() == f'This computer: {name}; My PC is on the left'
     assert (message + ' / ' + name).render().endswith(name)
     assert name in message.render()
+
+
+def test_exception_messages_keep_localization_parameters():
+    message = exception_text(OSError(tr('缺少 X11 系统库：{p0}。请按 Linux 安装说明安装依赖。', p0='libXi.so')))
+    assert isinstance(message, Message)
+    set_language('en')
+    assert message.render().startswith('Missing X11 system library: libXi.so.')
+    assert exception_text(OSError('OS message: 中文.txt')) == 'OS message: 中文.txt'
 
 
 @pytest.fixture

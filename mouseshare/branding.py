@@ -2,8 +2,18 @@
 import math
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import (QColor, QIcon, QImage, QLinearGradient, QPainter, QPainterPath, QPen,
-                           QPixmap, QRadialGradient, QTransform)
+from PySide6.QtGui import (
+    QColor,
+    QIcon,
+    QImage,
+    QLinearGradient,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
+    QRadialGradient,
+    QTransform,
+)
 
 INK = "#14262b"
 ACCENT = "#0e9384"

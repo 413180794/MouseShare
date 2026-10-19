@@ -1,5 +1,5 @@
 """An optional click-through colored ring identifies remotely controlled input."""
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QCursor, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 

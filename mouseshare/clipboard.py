@@ -10,7 +10,7 @@ from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QMimeData, QObject, Q
 from PySide6.QtGui import QImage, QImageReader
 from PySide6.QtWidgets import QApplication
 
-from .i18n import tr
+from .i18n import exception_text, tr
 from .sharing import MAX_CLIPBOARD
 
 ORIGIN = 'application/x-mouseshare-origin'
@@ -182,7 +182,7 @@ class ClipboardSync(QObject):
                 self.service.send_clipboard(payload)
         except (ValueError, OSError) as exc:
             # Deduplicate errors without retaining clipboard contents.
-            message = str(exc)
+            message = exception_text(exc)
             if self.last != message:
                 self.last = message
                 self.status(message)
@@ -206,7 +206,7 @@ class ClipboardSync(QObject):
                 return
             self.status(tr('已共享当前剪贴板；文件可在目标电脑按共享粘贴键接收'))
         except (ValueError, OSError) as exc:
-            self.status(str(exc))
+            self.status(exception_text(exc))
 
     def apply_pending(self):
         payload, session = self.pending_remote, self.pending_session

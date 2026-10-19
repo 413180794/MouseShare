@@ -30,7 +30,7 @@ from .drop_overlay import EdgePortal
 from .engine import Engine
 from .file_clipboard import FileClipboard
 from .games import GAMES, add_defaults
-from .i18n import language, set_language, tr
+from .i18n import exception_text, language, set_language, tr
 from .i18n_widgets import (
     QAction,
     QCheckBox,
@@ -949,8 +949,8 @@ class MainWindow(QMainWindow):
             self.settings_changed()
             self.notice(tr('设置已保存。请在两台电脑上分别设置对方所在方向。'))
         except OSError as exc:
-            self.notice(str(exc))
-            self.save_feedback(str(exc), warning=True)
+            self.notice(exception_text(exc))
+            self.save_feedback(exception_text(exc), warning=True)
 
     def check_permissions(self):
         if self.permission_guide is None:

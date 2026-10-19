@@ -5,7 +5,7 @@ from PySide6.QtCore import QPointF, QRectF, QSignalBlocker, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsObject, QGraphicsScene, QHBoxLayout, QVBoxLayout
 
-from .i18n import tr
+from .i18n import exception_text, tr
 from .i18n_widgets import (
     QCheckBox,
     QComboBox,
@@ -213,7 +213,7 @@ class LayoutEditor(QWidget):
             self.validate_nodes({**self.nodes, item.key: node})
         except ValueError as exc:
             item.setPos(old)
-            self.feedback.setText(str(exc))
+            self.feedback.setText(exception_text(exc))
             return
         self.nodes[item.key] = node
         item.setPos(node['x'], node['y'])
@@ -280,7 +280,7 @@ class LayoutEditor(QWidget):
         try:
             data = validate_layout(data)
         except ValueError as exc:
-            self.feedback.setText(str(exc))
+            self.feedback.setText(exception_text(exc))
             return
         self.saving_revision = data['revision']
         self.apply_layout(data)
