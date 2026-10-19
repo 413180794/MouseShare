@@ -310,3 +310,18 @@ def test_two_monitor_source_enters_peer_and_returns_to_correct_physical_display(
     assert route['type'] == 'route' and route['target'] == a
     source.receive(route)
     assert source.state == 'local' and source.backend.moves[-1] == pytest.approx((1911, 300))
+
+
+def test_legacy_pair_never_hands_off_at_internal_monitor_border(tmp_path):
+    from test_displays import dual
+    engine, now = setup(tmp_path)
+    engine.backend.monitors = lambda: dual()['monitors']
+    engine.backend.bounds = lambda: (-1920, 0, 3840, 1080)
+    engine.physical(dict(type='move', x=-1, y=700, dx=10, dy=0))
+    now[0] += .2
+    engine.tick()
+    assert engine.state == 'local'
+    engine.physical(dict(type='move', x=1919, y=700, dx=10, dy=0))
+    now[0] += .2
+    engine.tick()
+    assert engine.state == 'pending'

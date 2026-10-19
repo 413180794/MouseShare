@@ -155,8 +155,9 @@ class Engine:
             edge = return_edge or self.handoff_side
             ratio = self.handoff_ratio if return_ratio is None else return_ratio
             point = return_point or (self.handoff_point if return_ratio is None else None)
-            self.backend.move(*(native(point, self.backend.screen_info()) if point else
-                                 entry_point(edge, ratio, self.backend.bounds())))
+            screen = self.backend.screen_info()
+            self.backend.move(*(native(point, screen) if point else
+                                 project(entry_point(edge, ratio, self.backend.bounds()), screen)))
         if tell_peer:
             for session in targets:
                 message = {'type': 'release'}
@@ -321,7 +322,7 @@ class Engine:
             return
         if kind == 'move':
             self.last_position = event['x'], event['y']
-            bounds = self.backend.monitor_at(self.last_position)
+            bounds = self.backend.monitor_at(self.last_position) if self.layout() else self.backend.bounds()
             screen = self.backend.screen_info()
             if all(not at_edge(side, *self.last_position, bounds, margin=24)
                    for side in (('left', 'right', 'top', 'bottom') if self.layout() else (self.settings.get('side'),))):
@@ -457,9 +458,10 @@ class Engine:
             self.peer_available = self.availability.get(key, False)
             self.controller = False
             self.incoming_edge = OPPOSITE[message['edge']]
-            self.remote_position = (native(message['point'], self.backend.screen_info()) if message.get('point')
+            screen = self.backend.screen_info()
+            self.remote_position = (native(message['point'], screen) if message.get('point')
                                     and supports(session, 'monitors-v1') else
-                                    entry_point(self.incoming_edge, message['position'], self.backend.bounds()))
+                                    project(entry_point(self.incoming_edge, message['position'], self.backend.bounds()), screen))
             self.backend.move(*self.remote_position)
             self.state, self.entered_at, self.return_since = 'receiving', self.clock(), None
             self.send({'type': 'entered'})
@@ -532,7 +534,7 @@ class Engine:
         x, y = self.remote_position
         screen = self.backend.screen_info()
         x, y = project((x+dx*speed, y+dy*speed), screen)
-        bounds = self.backend.monitor_at((x, y))
+        bounds = self.backend.monitor_at((x, y)) if self.layout() else self.backend.bounds()
         self.remote_position = x, y
         self.backend.move(x, y)
         layout = self.layout()
