@@ -90,7 +90,7 @@ def main():
         import plistlib
         info = bundle / "Contents/Info.plist"
         content = plistlib.loads(info.read_bytes())
-        content.update({"CFBundleShortVersionString": "0.5.1", "CFBundleVersion": "13",
+        content.update({"CFBundleShortVersionString": "0.5.2", "CFBundleVersion": "14",
                         "LSMinimumSystemVersion": "13.0",
                         "NSLocalNetworkUsageDescription": "自动发现局域网中的电脑，并共享鼠标和键盘。",
                         "NSInputMonitoringUsageDescription": "读取键鼠输入以在您配对的电脑之间切换控制。",
@@ -100,30 +100,33 @@ def main():
         run("codesign", "--force", "--deep", "--sign", "-", bundle)
         run("codesign", "--verify", "--deep", "--strict", bundle)
         run(bundle / "Contents/MacOS/MouseShare", "--smoke-test")
+        run(bundle / "Contents/MacOS/MouseShare", "--drop-smoke-test")
         stage = ROOT / "build/dmg"
         shutil.rmtree(stage, ignore_errors=True)
         stage.mkdir(parents=True)
         shutil.copytree(bundle, stage / bundle.name, symlinks=True)
         (stage / "Applications").symlink_to("/Applications")
         shutil.copyfile(ROOT / "docs/INSTALL-macOS.txt", stage / "安装说明.txt")
-        target = DIST / f"MouseShare-0.5.1-macOS-{platform.machine()}.dmg"
+        target = DIST / f"MouseShare-0.5.2-macOS-{platform.machine()}.dmg"
         target.unlink(missing_ok=True)
         run("hdiutil", "create", "-volname", "MouseShare", "-srcfolder", stage,
             "-ov", "-format", "UDZO", target)
     elif sys.platform == "win32":
         licenses(DIST / "MouseShare/licenses")
         run(DIST / "MouseShare/MouseShare.exe", "--smoke-test")
+        run(DIST / "MouseShare/MouseShare.exe", "--drop-smoke-test")
         compiler = Path(r"C:\Program Files (x86)\Inno Setup 6\ISCC.exe")
         run(compiler, ROOT / "packaging/windows.iss")
         shutil.copyfile(ROOT / "docs/INSTALL-Windows.txt", DIST / "MouseShare/安装说明.txt")
-        shutil.make_archive(str(DIST / "MouseShare-0.5.1-Windows-x64-portable"), "zip",
+        shutil.make_archive(str(DIST / "MouseShare-0.5.2-Windows-x64-portable"), "zip",
                             DIST, "MouseShare")
     elif sys.platform.startswith("linux"):
         licenses(DIST / "MouseShare/licenses")
         run(DIST / "MouseShare/MouseShare", "--smoke-test")
+        run(DIST / "MouseShare/MouseShare", "--drop-smoke-test")
         sys.path.insert(0, str(ROOT / "packaging"))
         from linux import build_linux
-        build_linux(ROOT, DIST, "0.5.1")
+        build_linux(ROOT, DIST, "0.5.2")
     else:
         raise RuntimeError("Unsupported build platform")
 

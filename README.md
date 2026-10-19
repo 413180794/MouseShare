@@ -6,7 +6,7 @@ Windows / macOS / Linux（X11）局域网鼠标键盘、剪贴板和文件共享
 
 [下载安装包](https://github.com/413180794/MouseShare/releases) · [构建记录](https://github.com/413180794/MouseShare/actions) · [双机验收清单](docs/ACCEPTANCE.md)
 
-**v0.5.1 为预览版。** 自动测试覆盖真实 TLS 双端／三端通信和控制状态机；真实桌面交互、系统授权及具体游戏环境仍需按验收清单确认。Linux 暂无实体电脑验收，CI 使用隔离 Xvfb 验证。
+**v0.5.2 为预览版。** 自动测试覆盖真实 TLS 双端／三端通信和控制状态机；真实桌面交互、系统授权及具体游戏环境仍需按验收清单确认。Linux 暂无实体电脑验收，CI 使用隔离 Xvfb 验证。
 
 ![MouseShare 界面示意，设备数据为演示数据](docs/screenshot.png)
 
@@ -14,12 +14,12 @@ Windows / macOS / Linux（X11）局域网鼠标键盘、剪贴板和文件共享
 
 | 电脑 | 下载文件 | 安装方式 |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.5.1-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
-| Apple Silicon Mac，macOS 13+ | `MouseShare-0.5.1-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Intel Mac，macOS 13+ | `MouseShare-0.5.1-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
-| Linux x64，Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.5.1-Linux-x64.deb` 或 `.tar.gz` | `sudo apt install ./文件名.deb`；便携包解压运行 |
-| Linux ARM64，Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.5.1-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
-| Windows 便携版 | `MouseShare-0.5.1-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
+| Windows 10/11 x64 | `MouseShare-0.5.2-Windows-x64-Setup.exe` | 运行安装程序，保留专用网络防火墙规则 |
+| Apple Silicon Mac，macOS 13+ | `MouseShare-0.5.2-macOS-arm64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Intel Mac，macOS 13+ | `MouseShare-0.5.2-macOS-x86_64.dmg` | 打开 DMG，拖入「应用程序」 |
+| Linux x64，Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.5.2-Linux-x64.deb` 或 `.tar.gz` | `sudo apt install ./文件名.deb`；便携包解压运行 |
+| Linux ARM64，Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.5.2-Linux-arm64.deb` 或 `.tar.gz` | 同上 |
+| Windows 便携版 | `MouseShare-0.5.2-Windows-x64-portable.zip` | 完整解压后运行 `MouseShare.exe` |
 
 所有包都包含运行依赖，使用者无需安装 Python。Windows 安装程序仅在安装及添加防火墙规则时请求管理员权限，应用以普通用户身份运行。
 
@@ -85,11 +85,13 @@ Windows 自动检测前台全屏窗口及游戏进程。默认已加入 32 组�
 
 ## 文件与剪贴板
 
-文字、富文本和图片在连接后复制即可同步。文件在目标窗口粘贴时按需传输：在源端复制后，到目标端按 Ctrl+Alt+Shift+V，可直接接收并粘贴。也可使用专用复制键 Ctrl+Alt+Shift+C，Mac 对应 Control+Option+Shift+C／V。可选开启系统 Ctrl+V／⌘V；仅有新收到的文件信息时接管。自动粘贴要求目标窗口、输入活动和剪贴板保持原状态；还可拖进软件或屏幕边缘的投递口，在接收端从记录拖出。提供进度／速度、取消、重新发送、接收目录、同名保护和本机记录。游戏模式与暂停同时停止内容共享。
+文字、富文本和图片在连接后复制即可同步。文件在目标窗口粘贴时按需传输：在源端复制后，到目标端按 Ctrl+Alt+Shift+V，可直接接收并粘贴。也可使用专用复制键 Ctrl+Alt+Shift+C，Mac 对应 Control+Option+Shift+C／V。可选开启系统 Ctrl+V／⌘V；仅有新收到的文件信息时接管。自动粘贴要求目标窗口、输入活动和剪贴板保持原状态；还可拖进软件；开启边缘投递后，将文件拖到相邻电脑的边缘会展开全屏毛玻璃投递层，松手发送、Esc 取消，平时保持隐藏，在接收端从记录拖出。提供进度／速度、取消、重新发送、接收目录、同名保护和本机记录。游戏模式与暂停同时停止内容共享。
 
-[操作方式、容量限制与后续计划](docs/SHARING.md)。内容共享兼容 v0.3.0+；Linux 端使用 v0.4.0+；多机布局和按需文件粘贴要求参与设备均为 v0.5.0+。Wayland 通过「同步当前剪贴板／应用收到的剪贴板」按钮在前台操作。文件拖放采用投递口交接，接收完成后拖入本机应用。
+[操作方式、容量限制与后续计划](docs/SHARING.md)。内容共享兼容 v0.3.0+；Linux 端使用 v0.4.0+；多机布局和按需文件粘贴要求参与设备均为 v0.5.0+。Wayland 通过「同步当前剪贴板／应用收到的剪贴板」按钮在前台操作。文件拖放采用全屏投递层交接，接收完成后拖入本机应用。Mac 和 Windows 11 优先使用系统原生模糊；其他桌面及关闭系统透明效果时提供深色半透明背景。此效果通过系统合成器完成，无需屏幕录制权限。
 
 ![文件与剪贴板界面，任务为演示数据](docs/sharing.png)
+
+![全屏投递层示意，设备和文件为样例，实际背景由系统合成器渲染](docs/drop-overlay.png)
 
 ## 范围与限制
 

@@ -6,7 +6,7 @@ Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux 
 
 [Download](https://github.com/413180794/MouseShare/releases) · [Builds](https://github.com/413180794/MouseShare/actions) · [Acceptance checklist](docs/ACCEPTANCE.md)
 
-**v0.5.1 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available. The application UI is currently primarily Simplified Chinese.
+**v0.5.2 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available. The application UI is currently primarily Simplified Chinese.
 
 ![Connection UI with isolated sample devices](docs/screenshot.png)
 
@@ -14,12 +14,12 @@ Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux 
 
 | Platform | Package | Installation |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.5.1-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
-| Windows portable | `MouseShare-0.5.1-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
-| Apple Silicon, macOS 13+ | `MouseShare-0.5.1-macOS-arm64.dmg` | Drag the app into Applications |
-| Intel, macOS 13+ | `MouseShare-0.5.1-macOS-x86_64.dmg` | Drag the app into Applications |
-| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.5.1-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
-| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.5.1-Linux-arm64.deb` or `.tar.gz` | Same as above |
+| Windows 10/11 x64 | `MouseShare-0.5.2-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
+| Windows portable | `MouseShare-0.5.2-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
+| Apple Silicon, macOS 13+ | `MouseShare-0.5.2-macOS-arm64.dmg` | Drag the app into Applications |
+| Intel, macOS 13+ | `MouseShare-0.5.2-macOS-x86_64.dmg` | Drag the app into Applications |
+| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.5.2-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
+| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.5.2-Linux-arm64.deb` or `.tar.gz` | Same as above |
 
 Packages include Python and Qt. Linux still requires X11/Qt system libraries; the DEB declares these dependencies. The portable archive includes a user-level `install.sh` that adds a menu entry and preserves older version directories. See [Linux instructions](docs/INSTALL-Linux.txt).
 
@@ -81,7 +81,7 @@ Physical input on a receiving computer reclaims control. Holding a key or mouse 
 
 ## Clipboard and files
 
-New text, HTML and images copied after connection sync automatically on Windows/macOS/X11. Files are fetched when you paste: copy files on the source, then press Ctrl+Alt+Shift+V in the destination window. Ctrl+Alt+Shift+C is a dedicated copy command; macOS uses Control+Option+Shift+C/V. Optional native Ctrl+V/Command+V interception applies only to fresh remote file offers. Automatic paste requires the original focus, input activity and clipboard to remain unchanged; otherwise use the completed transfer record. Explicit sends still offer receive confirmation; the completed record also offers Copy Files and a drag-out button. You can drop files onto the app or an optional screen-edge drop tab.
+New text, HTML and images copied after connection sync automatically on Windows/macOS/X11. Files are fetched when you paste: copy files on the source, then press Ctrl+Alt+Shift+V in the destination window. Ctrl+Alt+Shift+C is a dedicated copy command; macOS uses Control+Option+Shift+C/V. Optional native Ctrl+V/Command+V interception applies only to fresh remote file offers. Automatic paste requires the original focus, input activity and clipboard to remain unchanged; otherwise use the completed transfer record. Explicit sends still offer receive confirmation; the completed record also offers Copy Files and a drag-out button. You can drop files onto the app. The optional edge drop surface expands into a full-screen glass overlay only when dragging local files onto a connected screen edge. Release to send, or press Esc to cancel; idle desktops stay clear. It also works when remote input controls the source file manager.
 
 Transfers show progress, speed and estimated time, support cancellation/re-send, and save batches in separate folders to preserve existing filenames. Each file is verified with SHA-256. The default receive directory is `Downloads/MouseShare`; it is configurable. The latest 20 completed/failed records store metadata locally. Clearing records keeps received files.
 
@@ -89,10 +89,12 @@ Transfers show progress, speed and estimated time, support cancellation/re-send,
 - Text and HTML combined: **2 MiB**. Entire clipboard payload: **8 MiB**. Images: **16 million pixels**.
 - Clipboard content from before connection stays local; copy again to send. Received content is marked to avoid loops. Marked private password-manager formats are skipped; ordinary text follows your sharing settings.
 - Game mode, pause, lock and disconnect stop sharing. Incomplete file transfers are cleaned up. Re-send starts from the beginning.
-- Native continuous file dragging across screen edges remains future work. The current flow uses a drop tab, transfer, then local drag-out.
+- Native continuous file dragging across screen edges remains future work. The current flow uses the glass drop surface, transfer, then local drag-out. macOS and Windows 11 request native compositor blur; other desktops and reduced-transparency settings use a dark translucent fallback. No screen capture or Screen Recording permission is required.
 - Content sharing is compatible with v0.3.0+; Linux requires v0.4.0+; multi-computer layouts and on-demand file paste require v0.5.0+ on participating devices. Wayland uses explicit foreground clipboard actions, and received files are copied through the record's Copy Files button.
 
 ![File sharing UI with sample transfer data](docs/sharing.png)
+
+![Full-screen drop surface with sample data; the compositor renders the actual backdrop](docs/drop-overlay.png)
 
 ## Everyday use and limits
 

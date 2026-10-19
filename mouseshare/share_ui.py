@@ -3,7 +3,7 @@ import json
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal, QUrl, QTimer, QSignalBlocker
+from PySide6.QtCore import Qt, Signal, QUrl, QSignalBlocker
 from PySide6.QtGui import QDesktopServices, QDrag
 from PySide6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QLayout,
                                QLineEdit, QProgressBar, QPushButton, QVBoxLayout, QWidget, QSizePolicy)
@@ -135,10 +135,14 @@ class SharePanel(QWidget):
         self.auto_receive.setChecked(window.settings.get('auto_receive_files', False))
         self.auto_receive.toggled.connect(lambda value: self.preference('auto_receive_files', value))
         body.addWidget(self.auto_receive)
-        self.portal_enabled = QCheckBox('显示屏幕边缘的文件投递口')
+        self.portal_enabled = QCheckBox('拖文件到屏幕边缘时，展开全屏毛玻璃投递层')
         self.portal_enabled.setChecked(window.settings.get('edge_drop', False))
         self.portal_enabled.toggled.connect(lambda value: self.preference('edge_drop', value))
         body.addWidget(self.portal_enabled)
+        preview = QPushButton('预览投递效果 · 3 秒')
+        preview.clicked.connect(lambda: window.edge_portal.preview())
+        body.addWidget(preview)
+        body.addWidget(text_label('平时隐藏；拖文件到相邻电脑的边缘后展开。松手提交，Esc 取消，传输在后台继续。', 'hint', True))
         self.recipient = QComboBox()
         self.recipient.setAccessibleName('文件发送目标')
         body.addWidget(text_label('文件发送目标', 'hint'))
@@ -336,38 +340,3 @@ class SharePanel(QWidget):
                 self.events.pop(key)
         self.save_history()
         self.empty.setVisible(not self.rows)
-
-
-class EdgePortal(DropZone):
-    """Optional native file drop tab at the configured primary-screen edge."""
-    def __init__(self, window):
-        super().__init__('拖入文件\n发送到对方')
-        self.window = window
-        self.setWindowTitle('MouseShare 文件投递口')
-        self.setWindowFlags(Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint |
-                            Qt.WindowType.WindowStaysOnTopHint | Qt.WindowType.WindowDoesNotAcceptFocus)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setMinimumHeight(0)
-        self.setFixedSize(100, 64)
-        self.files.connect(window.share_panel.send)
-        self.timer = QTimer(self)
-        self.timer.setInterval(500)
-        self.timer.timeout.connect(self.refresh)
-        self.timer.start()
-
-    def refresh(self):
-        state = getattr(self.window, 'ui_state', {})
-        visible = (not self.window.demo and self.window.settings.get('edge_drop', False)
-                   and self.window.sharing.enabled('files') and state.get('peer_available')
-                   and state.get('state') == 'local')
-        if visible:
-            rect = QApplication.primaryScreen().availableGeometry()
-            side = self.window.settings.get('side')
-            x = rect.left() if side == 'left' else rect.right() - self.width() + 1 if side == 'right' else rect.center().x() - 50
-            y = rect.top() if side == 'top' else rect.bottom() - self.height() + 1 if side == 'bottom' else rect.center().y() - 32
-            self.move(x, y)
-        self.setVisible(bool(visible))
-
-    def closeEvent(self, event):
-        self.timer.stop()
-        super().closeEvent(event)

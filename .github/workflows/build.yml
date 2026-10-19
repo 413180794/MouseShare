@@ -53,7 +53,9 @@ jobs:
         run: python -m pytest -q
       - name: Native dependency smoke test
         if: runner.os != 'Linux'
-        run: python -m mouseshare --smoke-test
+        run: |
+          python -m mouseshare --smoke-test
+          python -m mouseshare --drop-smoke-test
       - name: Build installer and verify bundled runtime
         if: runner.os != 'Linux'
         run: python scripts/build.py
@@ -69,6 +71,7 @@ jobs:
           XDG_SESSION_TYPE: x11
         run: |
           xvfb-run -a python -m mouseshare --smoke-test
+          xvfb-run -a python -m mouseshare --drop-smoke-test
           xvfb-run -a python scripts/build.py
       - name: Verify Linux package and user installer
         if: runner.os == 'Linux'
@@ -86,7 +89,7 @@ jobs:
         shell: pwsh
         run: |
           $installDir = Join-Path $env:RUNNER_TEMP 'MouseShare-Install-Test'
-          $setup = Resolve-Path 'dist/MouseShare-0.5.1-Windows-x64-Setup.exe'
+          $setup = Resolve-Path 'dist/MouseShare-0.5.2-Windows-x64-Setup.exe'
           $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', "/DIR=`"$installDir`"", '/TASKS=""')
           $installer = Start-Process $setup -ArgumentList $arguments -Wait -PassThru
           if ($installer.ExitCode -ne 0) { throw "Installer failed: $($installer.ExitCode)" }

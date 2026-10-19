@@ -28,7 +28,8 @@ from .permissions import PermissionGuide
 from .security import Identity
 from .sharing import SharingService
 from .clipboard import ClipboardSync
-from .share_ui import EdgePortal, SharePanel
+from .share_ui import SharePanel
+from .drop_overlay import EdgePortal
 from .games import GAMES, add_defaults
 from .layout_ui import LayoutEditor
 from .file_clipboard import FileClipboard
@@ -939,6 +940,8 @@ def main():
     parser.add_argument("--minimized", action="store_true")
     parser.add_argument("--demo", action="store_true", help="Show UI without hooks or network")
     parser.add_argument("--smoke-test", action="store_true", help="Validate packaged dependencies then exit")
+    parser.add_argument('--preview-drop', action='store_true', help='Preview the drop overlay for 12 seconds, without input hooks')
+    parser.add_argument('--drop-smoke-test', action='store_true', help='Validate native blur and clean up without hooks or network')
     args = parser.parse_args()
     if sys.platform == "win32":
         try:
@@ -963,6 +966,9 @@ def main():
             assert isinstance(backend.permissions(), bool)
         print(f"MouseShare {__version__} smoke test OK ({platform.system()} {platform.machine()})")
         return 0
+    if args.preview_drop or args.drop_smoke_test:
+        from .drop_overlay import run_preview
+        return run_preview(app, smoke=args.drop_smoke_test)
     # A fixed per-user local server prevents a second instance from installing duplicate hooks.
     name = f"MouseShare-{os.environ.get('USERNAME', os.environ.get('USER', 'desktop'))}"
     existing = QLocalSocket()

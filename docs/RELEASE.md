@@ -1,14 +1,12 @@
-MouseShare v0.5.1 · 可拖动多机布局、光标识别与按需文件粘贴 / Multi-computer layout and file paste
+MouseShare v0.5.2 · 全屏毛玻璃文件投递 / Full-screen glass file drop
 
-- 修复三机共享时的文件选择：A 控制 C、B 刚复制新文件时，C 粘贴最新收到的文件信息，保留单次请求和原窗口校验。
-- 新增「屏幕布局」：拖动屏幕、边缘吸附、错位与大小调整、精确坐标；最多 8 台电脑。布局同步到参与布局的已配对新版本设备。
-- 可从 A→B→C 连续切换，再沿布局返回。仅从实际接触、重叠且在线的边缘跨屏；每两台需要直接控制或传文件的电脑均需独立配对。
-- Windows 源端也会隐藏光标；Mac 保留经过实机验收的固定交接位置和光标窗口方案。返回、暂停、游戏模式和断线时恢复光标。接收端可显示青绿／蓝／紫／橙色光圈。
-- 文件剪贴板改为按需传输：复制时只共享文件信息，在目标窗口粘贴时取回文件。Ctrl+Alt+Shift+C／V 为专用快捷键；Mac 对应 Control+Option+Shift+C／V。可选支持系统 Ctrl+V／⌘V。
-- 本机发起的单次粘贴请求可自动接收对应文件。自动粘贴检查焦点窗口、输入活动、控制会话和剪贴板；变化时保留文件供手动复制。文件发送可选择具体电脑，保留显式接收、拖入／拖出及 SHA-256 校验。
+- 用全屏临时投递层替换常驻边缘小窗：平时隐藏，拖本地文件到布局中已连接的电脑边缘时展开，显示目标设备、文件信息和 Esc 取消提示。
+- 松手提交后迅速收起，传输继续在后台进行；保留对端接收确认、目录副本和 SHA-256 校验。支持本机鼠标及远端键鼠控制中的文件拖放。
+- Mac 使用系统原生模糊，Windows 11 使用 Desktop Acrylic，其他桌面按合成器能力提供模糊或深色半透明背景。尊重减少透明度设置，不需要屏幕录制权限。
+- 提供 3 秒效果预览；取消、断线、游戏保护、暂停和控制会话变化时收起。投递目标绑定进入浮层时的认证连接，避免切换选中设备后发错电脑。
 
-The v0.5.1 patch selects the most recently received file offer across connected computers, including when a different computer supplies physical input. Drag computer rectangles to arrange up to eight paired computers. Input can travel A→B→C and back along touching edges. The source pointer hides while forwarding; the receiver can show a configurable colored ring. Files are fetched on paste, with dedicated Ctrl+Alt+Shift+C/V (Control+Option+Shift on Mac) and optional native paste shortcuts. A local one-time request authorizes its matching transfer; automatic paste requires the original window, activity, clipboard and control context to remain unchanged.
+The persistent edge tab is replaced by a transient full-screen glass drop surface. Drag local files to a connected screen edge, check the destination, then release to send or press Esc to cancel. The desktop returns while transfer continues in the background. Local and remotely controlled file drags are supported. Native compositor blur is requested on supported desktops, with a dark translucent fallback and respect for reduced-transparency settings. No desktop screenshots or Screen Recording permission are needed.
 
-多机布局及按需文件粘贴要求参与设备升级至 v0.5.0+。基础双机键鼠／内容共享兼容旧版。每个电脑矩形代表该设备的主显示器；单机多显示器独立拓扑继续列为后续功能。Wayland 保留文件传输与手动剪贴板入口；完整键鼠与全局快捷键使用 X11。Linux 暂无实体电脑验收，CI 使用隔离 Xvfb。实体键鼠、具体文件管理器和前后台光标行为需要设备验收。
+沿用 v0.5.x 多机拖动布局、源端光标隐藏、四色接收光圈和文件复制粘贴。原生连续跨电脑拖动到任意应用仍使用“投递 → 接收 → 本机拖出”的交接方式。Linux 全局键鼠／边缘拖动使用 X11；Wayland 保留软件内文件投递和手动剪贴板入口。Windows、macOS arm64／Intel、Linux x64／ARM64 包均包含运行依赖。
 
-Preview builds have no commercial signing / Apple notarization. Verify `SHA256SUMS.txt` and follow the installation instructions.
+预览版尚无商业代码签名或 Apple 公证。请核对 SHA256SUMS.txt；平台与实体文件管理器的拖动表现需实机验收。
