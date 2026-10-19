@@ -1,11 +1,11 @@
-MouseShare 0.7.0 — Linux
+MouseShare 0.7.1 — Linux
 
 x64: Ubuntu 22.04+ / Debian 12+ (glibc 2.35+).
 ARM64: Ubuntu 24.04+ / Debian 13+ (glibc 2.39+).
 Use an X11 desktop for full input sharing.
 
 Recommended installation:
-  sudo apt install ./MouseShare-0.7.0-Linux-x64.deb
+  sudo apt install ./MouseShare-0.7.1-Linux-x64.deb
   ARM64: replace x64 with arm64.
 
 Portable archive:

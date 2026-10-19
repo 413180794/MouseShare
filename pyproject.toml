@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mouseshare"
-version = "0.7.0"
+version = "0.7.1"
 description = "Local, encrypted keyboard and mouse sharing for Windows, macOS and Linux (X11)"
 requires-python = ">=3.12,<3.15"
 license = "MIT"

@@ -322,7 +322,9 @@ class LinuxBackend(BaseBackend):
         self.shortcut_grabs = desired
 
     def clipboard_shortcut(self, action):
-        with self.lock:
+        # Match key/button/release_all: injection state before the X11 connection.
+        # Reversing these locks deadlocks a completed paste against remote key-up.
+        with self.inject_lock, self.lock:
             self.open()
             # End this client's passive key grab so the injected shortcut is
             # delivered to the existing focused application.

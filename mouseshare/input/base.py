@@ -81,17 +81,20 @@ class BaseBackend:
         return None
 
     def clipboard_shortcut(self, action):
-        self.release_all()
-        for modifier in range(224, 232):
-            self.key(modifier, False)
-        modifier = min(self.copy_modifier)
-        key = 6 if action == 'copy' else 25
-        try:
-            self.key(modifier, True)
-            self.key(key, True)
-            self.key(key, False)
-        finally:
-            self.key(modifier, False)
+        # A clipboard callback runs on the GUI thread while the input owner can
+        # release remote keys. Keep the entire synthetic chord atomic with both.
+        with self.inject_lock:
+            self.release_all()
+            for modifier in range(224, 232):
+                self.key(modifier, False)
+            modifier = min(self.copy_modifier)
+            key = 6 if action == 'copy' else 25
+            try:
+                self.key(modifier, True)
+                self.key(key, True)
+                self.key(key, False)
+            finally:
+                self.key(modifier, False)
 
     def ready(self):
         return self.running and not self.error

@@ -4,7 +4,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -68,6 +70,63 @@ def test_desktop_exec_quotes_paths_without_shell_interpretation():
     assert '"/path with space/\\$folder/MouseShare"' in result and '"100%%"' in result
     with pytest.raises(OSError):
         desktop_entry(['/path\nExec=evil'])
+
+
+@pytest.mark.parametrize('action', ['copy', 'paste'])
+def test_clipboard_shortcut_and_remote_key_release_make_progress(action):
+    """Force the GUI shortcut to overlap input-owner modifier release."""
+    backend = LinuxBackend(lambda event: True)
+    remote_ready, clipboard_started = threading.Event(), threading.Event()
+    failures = []
+
+    class ObservedLock:
+        def __init__(self, x11=False):
+            self.inner, self.x11 = threading.RLock(), x11
+
+        def __enter__(self):
+            clipboard = threading.current_thread().name == 'clipboard-completion'
+            if clipboard and not self.x11:
+                clipboard_started.set()
+            if not self.inner.acquire(timeout=2):
+                raise TimeoutError('Clipboard and input owner are waiting on opposite locks')
+            if clipboard and self.x11:
+                clipboard_started.set()
+            return self
+
+        def __exit__(self, *args):
+            self.inner.release()
+
+    backend.inject_lock, backend.lock = ObservedLock(), ObservedLock(x11=True)
+    backend.open = lambda: None
+    backend.refresh_shortcut_grabs = lambda **kwargs: None
+    backend.api = SimpleNamespace(x=SimpleNamespace(XUngrabKeyboard=lambda *a: None,
+        XSync=lambda *a: None, XFlush=lambda *a: None),
+        xt=SimpleNamespace(XTestFakeKeyEvent=lambda *a: None))
+    backend.injected_keys.add(224)
+
+    def guarded(operation):
+        try:
+            operation()
+        except Exception as exc:
+            failures.append(exc)
+
+    def remote_release():
+        with backend.inject_lock:
+            remote_ready.set()
+            assert clipboard_started.wait(2)
+            backend.key(224, False)
+
+    remote = threading.Thread(target=lambda: guarded(remote_release), name='input-owner', daemon=True)
+    clipboard = threading.Thread(target=lambda: guarded(lambda: backend.clipboard_shortcut(action)),
+                                 name='clipboard-completion', daemon=True)
+    remote.start()
+    assert remote_ready.wait(2)
+    clipboard.start()
+    remote.join(4)
+    clipboard.join(4)
+    assert not remote.is_alive() and not clipboard.is_alive()
+    assert not failures, repr(failures)
+    assert not backend.injected_keys and not backend.injected_buttons
 
 
 native = pytest.mark.skipif(sys.platform != 'linux' or os.environ.get('MOUSESHARE_X11_TEST') != '1',
