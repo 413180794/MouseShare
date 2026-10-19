@@ -239,3 +239,36 @@ def test_bulk_transfer_uses_requested_peer_without_changing_selected_peer(pair, 
     finally:
         other.stop()
         c.stop()
+
+
+def test_local_paste_destination_never_comes_from_peer_manifest(pair, tmp_path):
+    (a, send, ae, _), (b, receive, be, _) = pair
+    receive.settings.set(auto_receive_files=False)
+    selected = tmp_path/'selected-folder'
+    selected.mkdir()
+    original = selected/'file.txt'
+    original.write_text('existing user file')
+    source = tmp_path/'file.txt'
+    source.write_text('received copy')
+    request, offer = 'a'*32, 'b'*32
+    receive.authorize_request = lambda peer, offered, requested: (
+        dict(destination=str(selected), max_bytes=1024) if peer == a.identity.id
+        and offered == offer and requested == request else False)
+    job = send.send_files([source], peer_id=b.identity.id, request=request, offer=offer, clipboard=True)
+    wait_for(lambda: send.jobs[job].status in {'complete', 'error'})
+    assert send.jobs[job].status == 'complete', send.jobs[job].detail
+    received = Path(receive.jobs[job].paths[0])
+    assert received.parent.parent == selected and received.read_text() == 'received copy'
+    assert original.read_text() == 'existing user file'
+
+
+def test_prefetch_limit_rejects_transfer_before_writing_bytes(pair, tmp_path):
+    (a, send, ae, _), (b, receive, be, _) = pair
+    source = tmp_path/'file.txt'
+    source.write_bytes(b'larger than the local prefetch allowance')
+    receive.authorize_request = lambda *args: dict(destination='', max_bytes=1)
+    job = send.send_files([source], peer_id=b.identity.id, request='a'*32, offer='b'*32, clipboard=True)
+    wait_for(lambda: send.jobs[job].status in {'complete', 'rejected', 'error'})
+    assert send.jobs[job].status != 'complete'
+    assert not list((tmp_path/'b/inbox').glob('**/file.txt'))
+    assert a.session.connected and b.session.connected

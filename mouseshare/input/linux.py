@@ -4,6 +4,7 @@ import ctypes.util
 import os
 import select
 import threading
+import time
 
 from ..i18n import exception_text, tr
 from .base import ALT, CTRL, BaseBackend
@@ -33,8 +34,15 @@ class Cookie(C.Structure):
                 ('extension', C.c_int), ('evtype', C.c_int), ('cookie', C.c_uint), ('data', C.c_void_p)]
 
 
+class KeyEvent(C.Structure):
+    _fields_ = [('type', C.c_int), ('serial', C.c_ulong), ('send_event', C.c_int), ('display', C.c_void_p),
+                ('window', C.c_ulong), ('root', C.c_ulong), ('subwindow', C.c_ulong), ('time', C.c_ulong),
+                ('x', C.c_int), ('y', C.c_int), ('x_root', C.c_int), ('y_root', C.c_int),
+                ('state', C.c_uint), ('keycode', C.c_uint), ('same_screen', C.c_int)]
+
+
 class Event(C.Union):
-    _fields_ = [('cookie', Cookie), ('pad', C.c_long * 24)]
+    _fields_ = [('cookie', Cookie), ('key', KeyEvent), ('pad', C.c_long * 24)]
 
 
 class Valuators(C.Structure):
@@ -168,7 +176,7 @@ def raw_axes(raw):
 
 
 class LinuxBackend(BaseBackend):
-    shortcuts = {41: 'panic', 10: 'game', 6: 'share_copy', 25: 'share_paste'}
+    shortcuts = {41: 'panic', 10: 'game', 6: 'share_copy', 25: 'share_paste', 44: 'switch_peer'}
     shortcut_modifiers = (CTRL, ALT, {225, 229})
     def __init__(self, emit):
         super().__init__(emit)
@@ -184,6 +192,8 @@ class LinuxBackend(BaseBackend):
         self.scroll_remainder = [0.0, 0.0]
         self.shortcut_grabs = set()
         self.shortcut_grab_error = False
+        self._monitors, self.monitor_checked = [], 0
+        self.key_stamps = {}
 
     def open(self):
         if self.display:
@@ -270,11 +280,16 @@ class LinuxBackend(BaseBackend):
                                 if 13 <= cookie.evtype <= 17:
                                     raw = C.cast(cookie.data, C.POINTER(RawEvent)).contents
                                     packet = (raw.evtype, raw.sourceid, raw.detail,
-                                              raw_axes(raw) if raw.evtype == 17 else {})
+                                              raw_axes(raw) if raw.evtype == 17 else {}, raw.time)
                             finally:
                                 x.XFreeEventData(self.display, C.byref(cookie))
+                        elif cookie.type == 2:
+                            packet = ('repeat', event.key.keycode, event.key.time)
                 if packet:
-                    self.raw_input(*packet)
+                    if packet[0] == 'repeat':
+                        self.core_key_press(packet[1], packet[2])
+                    else:
+                        self.raw_input(*packet)
                 elif not x.XPending(self.display):
                     select.select([fd], [], [], 0.02)
         except Exception as exc:
@@ -289,7 +304,10 @@ class LinuxBackend(BaseBackend):
         desired = set()
         if not suspend and self.running:
             if self.sharing_shortcuts_enabled:
-                desired.update((HID_TO_X11[key], 4 | 8 | 1 | locks) for key in (6, 25) for locks in (0, 2, 16, 18))
+                desired.update((HID_TO_X11[key], 4 | 8 | shift | locks)
+                               for key in (6, 25) for shift in (0, 1) for locks in (0, 2, 16, 18))
+            if self.switch_shortcut_enabled:
+                desired.update((HID_TO_X11[44], 4 | 8 | locks) for locks in (0, 2, 16, 18))
             if self.native_file_paste_ready:
                 desired.update((HID_TO_X11[25], 4 | locks) for locks in (0, 2, 16, 18))
         x = self.api.x
@@ -327,7 +345,16 @@ class LinuxBackend(BaseBackend):
                 return self._bounds[:2]
             return rx.value, ry.value
 
-    def raw_input(self, kind, source, detail, axes):
+    def core_key_press(self, detail, stamp):
+        hid = X11_TO_HID.get(detail)
+        # Under an active keyboard grab Xorg repeats are core KeyPress events,
+        # with no XI_RawKeyPress. Ignore the initial core/raw duplicate and never
+        # echo XTEST keys: only a physically held, non-modifier key may repeat.
+        if (self.captured and hid in self.keys and hid < 224 and self.key_stamps.get(detail) != stamp):
+            self.key_stamps[detail] = stamp
+            self.physical(dict(type='key', key=hid, down=True))
+
+    def raw_input(self, kind, source, detail, axes, stamp=None):
         if source in self.test_sources:
             return
         if kind == 17:
@@ -338,6 +365,12 @@ class LinuxBackend(BaseBackend):
         elif kind in {13, 14}:
             hid = X11_TO_HID.get(detail)
             if hid:
+                if kind == 13:
+                    if stamp is not None and self.key_stamps.get(detail) == stamp:
+                        return
+                    self.key_stamps[detail] = stamp
+                else:
+                    self.key_stamps.pop(detail, None)
                 self.physical(dict(type='key', key=hid, down=kind == 13))
         elif kind in {15, 16}:
             if detail in {4, 5, 6, 7}:
@@ -382,11 +415,18 @@ class LinuxBackend(BaseBackend):
             self.captured = True
 
     def bounds(self):
+        from ..displays import union
+        return union(self.monitors())
+
+    def monitors(self):
         with self.lock:
+            if self._monitors and time.monotonic()-self.monitor_checked < 1:
+                return self._monitors
             try:
                 self.open()
             except (OSError, AttributeError):
-                return self._bounds
+                x, y, w, h = self._bounds
+                return [dict(id='primary', x=x, y=y, w=w, h=h, primary=True)]
             count = C.c_int()
             major, minor = C.c_int(), C.c_int()
             version = self.api.rr.XRRQueryVersion(self.display, C.byref(major), C.byref(minor))
@@ -394,13 +434,18 @@ class LinuxBackend(BaseBackend):
                         if version and (major.value, minor.value) >= (1, 5) else None)
             try:
                 if monitors and count.value:
-                    monitor = next((monitors[i] for i in range(count.value) if monitors[i].primary), monitors[0])
-                    self._bounds = (monitor.x, monitor.y, monitor.width, monitor.height)
+                    self._monitors = [dict(id=str(monitors[i].name), x=monitors[i].x, y=monitors[i].y,
+                                           w=monitors[i].width, h=monitors[i].height, primary=bool(monitors[i].primary))
+                                      for i in range(min(count.value, 16))
+                                      if monitors[i].width >= 64 and monitors[i].height >= 64]
                 else:
                     screen = self.api.x.XDefaultScreen(self.display)
-                    self._bounds = (0, 0, self.api.x.XDisplayWidth(self.display, screen),
-                                    self.api.x.XDisplayHeight(self.display, screen))
-                return self._bounds
+                    self._monitors = [dict(id='primary', x=0, y=0, w=self.api.x.XDisplayWidth(self.display, screen),
+                                           h=self.api.x.XDisplayHeight(self.display, screen), primary=True)]
+                from ..displays import union
+                self._bounds = union(self._monitors)
+                self.monitor_checked = time.monotonic()
+                return self._monitors
             finally:
                 if monitors:
                     self.api.rr.XRRFreeMonitors(monitors)
@@ -416,6 +461,10 @@ class LinuxBackend(BaseBackend):
         if code:
             with self.inject_lock, self.lock:
                 self.open()
+                if down and key in self.injected_keys:
+                    # XTEST resets Xorg's repeat timer for duplicate presses.
+                    # Let Xorg repeat the held key at the destination's rate.
+                    return
                 self.api.xt.XTestFakeKeyEvent(self.display, code, bool(down), 0)
                 self.api.x.XFlush(self.display)
                 self.injected_keys.add(key) if down else self.injected_keys.discard(key)

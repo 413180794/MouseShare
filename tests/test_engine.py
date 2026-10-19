@@ -61,6 +61,22 @@ def test_handoff_waits_for_ack_then_routes_and_returns(tmp_path):
     assert not engine.armed
 
 
+def test_keyboard_only_switch_establishes_ownership_and_reclaims_safely(tmp_path):
+    engine, now = setup(tmp_path)
+    engine.backend.keys = {224, 226, 44}
+    engine.handle_command(dict(action='switch_peer'))
+    assert engine.state == 'pending' and engine.backend.captured
+    engine.receive(dict(type='entered'))
+    engine.physical(dict(type='key', key=4, down=True))
+    engine.physical(dict(type='key', key=4, down=False))
+    assert engine.session.messages[-2:] == [dict(type='key', key=4, down=True), dict(type='key', key=4, down=False)]
+    engine.handle_command(dict(action='switch_peer'))
+    assert engine.state == 'local' and not engine.backend.captured
+    engine.manual_game = True
+    engine.handle_command(dict(action='switch_peer'))
+    assert engine.state == 'local'
+
+
 @pytest.mark.parametrize("side,position", [
     ("right", (1919, 300)), ("left", (0, 300)),
     ("bottom", (700, 1079)), ("top", (700, 0)),
@@ -255,3 +271,42 @@ def test_source_returns_to_edge_with_mapped_position(tmp_path, side, finish):
     assert source.state == "local" and not source.backend.captured
     assert source.backend.moves == [pytest.approx(entry_point(side, ratio, bounds))]
 
+
+
+def test_two_monitor_source_enters_peer_and_returns_to_correct_physical_display(tmp_path):
+    from types import SimpleNamespace
+    from test_displays import dual
+    from mouseshare.topology import Rect
+    source, now = setup(tmp_path/'source')
+    target, target_now = setup(tmp_path/'target')
+    a, b = 'a'*64, 'b'*64
+    source.local_id, target.local_id = a, b
+    source.backend.monitors = lambda: dual()['monitors']
+    source.backend.bounds = lambda: (-1920, 0, 3840, 1080)
+    layout = dict(enabled=True, revision=1, author=a,
+                  nodes={a: Rect(0, 0, 640, 180).data(), b: Rect(640, 0, 320, 180).data()})
+    for engine, own, peer, screen in [(source, a, b, target.backend.screen_info()),
+                                       (target, b, a, source.backend.screen_info())]:
+        engine.settings.set(desktop_layout=layout)
+        engine.session = SimpleNamespace(peer_id=peer, peer_name=peer[:1], peer_screen=screen,
+                                          peer_features=['multi-v1', 'layout-v1', 'monitors-v1'], messages=[])
+        engine.session.send = lambda message, session=engine.session: session.messages.append(message) or True
+        engine.sessions = {peer: engine.session}
+        engine.availability = {peer: True}
+    source.physical(dict(type='move', x=1919, y=700, dx=20, dy=0))
+    now[0] += .2
+    source.tick()
+    enter = next(m for m in reversed(source.session.messages) if m['type'] == 'enter')
+    target.receive(enter)
+    source.receive(target.session.messages[-1])
+    assert source.state == 'sending' and target.state == 'receiving'
+    assert target.backend.moves[-1] == pytest.approx((8, 700))
+    target.remote_position = (0, 300)
+    target_now[0] += 1
+    target.remote_move(-10, 0)
+    target_now[0] += .1
+    target.remote_move(-10, 0)
+    route = target.session.messages[-1]
+    assert route['type'] == 'route' and route['target'] == a
+    source.receive(route)
+    assert source.state == 'local' and source.backend.moves[-1] == pytest.approx((1911, 300))

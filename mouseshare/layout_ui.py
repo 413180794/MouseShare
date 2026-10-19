@@ -6,6 +6,7 @@ from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QGraphicsObject, QGraphicsScene, QHBoxLayout, QVBoxLayout
 
 from .i18n import exception_text, tr
+from .displays import mapped_monitors
 from .i18n_widgets import (
     QCheckBox,
     QComboBox,
@@ -38,20 +39,43 @@ class DeviceNode(QGraphicsObject):
         painter.setBrush(QColor(ACCENT_SOFT if self.isSelected() else '#ffffff'))
         painter.setPen(QPen(QColor(ACCENT if self.isSelected() else LINE), 3 if self.isSelected() else 1.5))
         rect = self.boundingRect()
-        painter.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 12, 12)
+        screen = meta.get('screen') or dict(w=1920, h=1080)
+        monitors = list(mapped_monitors(dict(x=0, y=0, w=rect.width(), h=rect.height()), screen))
+        if len(monitors) > 1:
+            painter.setBrush(QColor('#e2e9ec'))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(rect, 12, 12)
+        for index, monitor in enumerate(monitors):
+            r = QRectF(*(monitor[k] for k in ('x', 'y', 'w', 'h'))).adjusted(2, 2, -2, -2)
+            painter.setBrush(QColor(ACCENT_SOFT if self.isSelected() else '#ffffff'))
+            painter.setPen(QPen(QColor(ACCENT if self.isSelected() else LINE), 2))
+            painter.drawRoundedRect(r, 10, 10)
+            if len(monitors) > 1:
+                font = QFont(painter.font())
+                font.setPixelSize(14)
+                painter.setFont(font)
+                painter.setPen(QColor(INK_2))
+                painter.drawText(r.adjusted(10, 8, -10, -8), Qt.AlignmentFlag.AlignTop, str(index+1))
         font = QFont(painter.font())
-        font.setPixelSize(20)
+        font.setPixelSize(16 if len(monitors) > 1 else 20)
         font.setBold(True)
         painter.setFont(font)
         painter.setPen(QColor(INK if active else INK_2))
-        name = meta.get('name', self.key[:8])
-        name = painter.fontMetrics().elidedText(name, Qt.TextElideMode.ElideRight, max(30, int(rect.width()-30)))
-        painter.drawText(rect.adjusted(15, 15, -15, -38), Qt.AlignmentFlag.AlignCenter, name)
-        font.setPixelSize(12)
-        font.setBold(False)
-        painter.setFont(font)
-        painter.drawText(rect.adjusted(10, 30, -10, -10), Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter,
-                         tr('本机') if local else (tr('已连接') if active else tr('离线／未配对')))
+        for index, monitor in enumerate(monitors):
+            label_rect = QRectF(*(monitor[k] for k in ('x', 'y', 'w', 'h')))
+            painter.setFont(font)
+            name = painter.fontMetrics().elidedText(meta.get('name', self.key[:8]), Qt.TextElideMode.ElideRight,
+                                                   max(30, int(label_rect.width()-30)))
+            painter.drawText(label_rect.adjusted(15, 15, -15, -38), Qt.AlignmentFlag.AlignCenter, name)
+            footer_font = QFont(font)
+            footer_font.setPixelSize(12)
+            footer_font.setBold(False)
+            painter.setFont(footer_font)
+            status = tr('本机') if local else (tr('已连接') if active else tr('离线／未配对'))
+            if len(monitors) > 1:
+                status = str(status)+f' · {index+1}/{len(monitors)}'
+            painter.drawText(label_rect.adjusted(10, 30, -10, -10),
+                             Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter, status)
         painter.setBrush(QColor(ACCENT if active else '#aab5b9'))
         painter.setPen(Qt.PenStyle.NoPen)
         painter.drawEllipse(QPointF(rect.width()-16, 16), 4, 4)
@@ -82,7 +106,7 @@ class LayoutEditor(QWidget):
         self.saving_revision = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        self.hint = text_label(tr('拖动电脑屏幕，让相邻边缘接触。错位摆放按实际重叠区域跨屏。'), 'hint', True)
+        self.hint = text_label(tr('每块显示器分别显示。同一电脑的屏幕按系统排列成组拖动；组内位置请在系统显示设置中调整。'), 'hint', True)
         layout.addWidget(self.hint)
         self.scene = QGraphicsScene(self)
         self.scene.selectionChanged.connect(self.selection_changed)

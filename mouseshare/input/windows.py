@@ -149,7 +149,25 @@ class WindowsBackend(BaseBackend):
         return int(hwnd), pid.value
 
     def bounds(self):
-        return (0, 0, U.GetSystemMetrics(0), U.GetSystemMetrics(1))
+        return tuple(U.GetSystemMetrics(k) for k in (76, 77, 78, 79))
+
+    def monitors(self):
+        return self.cached_monitors(self.read_monitors)
+
+    def read_monitors(self):
+        result = []
+        callback = C.WINFUNCTYPE(W.BOOL, W.HANDLE, W.HDC, C.POINTER(W.RECT), W.LPARAM)
+        def collect(handle, dc, rect, data):
+            r = rect.contents
+            result.append(dict(id=str(handle), x=r.left, y=r.top, w=r.right-r.left, h=r.bottom-r.top,
+                               primary=r.left == 0 and r.top == 0))
+            return True
+        fn = callback(collect)
+        U.EnumDisplayMonitors.argtypes = [W.HDC, C.POINTER(W.RECT), callback, W.LPARAM]
+        U.EnumDisplayMonitors.restype = W.BOOL
+        if not U.EnumDisplayMonitors(None, None, fn, 0) or not result:
+            raise C.WinError(C.get_last_error())
+        return result
 
     def start(self):
         if self.running:
@@ -302,6 +320,10 @@ class WindowsBackend(BaseBackend):
                 if data.dwExtraInfo != MARKER and not data.flags & 0x10:
                     scan = data.scanCode | (0xE000 if data.flags & 1 else 0)
                     key = WIN_SCANS.get(scan)
+                    if key is None:
+                        # Some firmware / keyboard layouts omit a scan code.
+                        # Prefer the physical code, then ask Windows for its VK mapping.
+                        key = WIN_SCANS.get(U.MapVirtualKeyW(data.vkCode, 4))
                     if key and self.physical({"type": "key", "key": key,
                                               "down": msg in (0x0100, 0x0104)}):
                         return 1

@@ -1,5 +1,5 @@
 #define AppName "MouseShare"
-#define AppVersion "0.6.2"
+#define AppVersion "0.7.0"
 #define SourceDir "..\dist\MouseShare"
 
 [Setup]
@@ -55,4 +55,6 @@ Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=
 
 [Registry]
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "MouseShare"; Flags: uninsdeletevalue
+Root: HKCU; Subkey: "Software\Classes\Directory\Background\shell\MouseSharePaste"; Flags: dontcreatekey uninsdeletekey
+Root: HKCU; Subkey: "Software\Classes\Directory\shell\MouseSharePaste"; Flags: dontcreatekey uninsdeletekey
 

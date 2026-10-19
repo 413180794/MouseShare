@@ -9,7 +9,7 @@ import time
 import pytest
 
 from mouseshare.input.linux import (Cookie, DeviceInfo, Event, HID_TO_X11, LinuxBackend, Monitor,
-                                    RawEvent, SaverInfo, Valuators, X11, raw_axes, session_problem)
+                                    KeyEvent, RawEvent, SaverInfo, Valuators, X11, raw_axes, session_problem)
 from mouseshare.startup import desktop_entry
 
 
@@ -83,10 +83,10 @@ def test_native_struct_abi_matches_system_headers(tmp_path):
 #include <X11/extensions/XInput2.h>
 #include <X11/extensions/Xrandr.h>
 #include <X11/extensions/scrnsaver.h>
-int main(void) {printf("[%zu,%zu,%zu,%zu,%zu,%zu,%zu]", sizeof(XEvent), sizeof(XGenericEventCookie), sizeof(XIRawEvent), sizeof(XIDeviceInfo), sizeof(XRRMonitorInfo), sizeof(XScreenSaverInfo), offsetof(XIRawEvent, valuators));}''')
+int main(void) {printf("[%zu,%zu,%zu,%zu,%zu,%zu,%zu,%zu]", sizeof(XEvent), sizeof(XGenericEventCookie), sizeof(XIRawEvent), sizeof(XIDeviceInfo), sizeof(XRRMonitorInfo), sizeof(XScreenSaverInfo), sizeof(XKeyEvent), offsetof(XIRawEvent, valuators));}''')
     subprocess.run(['cc', str(source), '-o', str(tmp_path / 'abi')], check=True)
     sizes = json.loads(subprocess.check_output([str(tmp_path / 'abi')]))
-    assert sizes == [C.sizeof(t) for t in [Event, Cookie, RawEvent, DeviceInfo, Monitor, SaverInfo]] + [RawEvent.valuators.offset]
+    assert sizes == [C.sizeof(t) for t in [Event, Cookie, RawEvent, DeviceInfo, Monitor, SaverInfo, KeyEvent]] + [RawEvent.valuators.offset]
 
 
 @native
@@ -282,7 +282,9 @@ def test_native_file_paste_grab_suppresses_original_and_injected_paste_reaches_f
     backend.start()
     try:
         backend.sharing_shortcuts_enabled = backend.native_file_paste_ready = True
-        wait_for(lambda: len(backend.shortcut_grabs) == 12)
+        backend.switch_shortcut_enabled = True
+        wait_for(lambda: all((HID_TO_X11[key], mask) in backend.shortcut_grabs
+                             for key, mask in [(25, 4), (25, 4 | 8), (25, 4 | 8 | 1), (44, 4 | 8)]))
         assert not backend.shortcut_grab_error
         # XTEST on a different connection stands in for an actual keyboard.
         api.xt.XTestFakeKeyEvent(display, HID_TO_X11[224], True, 0)
@@ -308,6 +310,110 @@ def test_native_file_paste_grab_suppresses_original_and_injected_paste_reaches_f
         backend.cursor_hidden(True)
         backend.cursor_hidden(False)
         assert not backend.cursor_is_hidden
+    finally:
+        backend.stop()
+        x.XDestroyWindow(display, window)
+        x.XCloseDisplay(display)
+
+
+def test_grabbed_core_repeat_deduplicates_raw_and_never_repeats_released_or_injected_keys():
+    events = []
+    backend = LinuxBackend(events.append)
+    backend.captured = True
+    backend.test_sources = {99}
+    backend.raw_input(13, 100, HID_TO_X11[4], {}, 10)
+    backend.core_key_press(HID_TO_X11[4], 10)
+    backend.core_key_press(HID_TO_X11[4], 20)
+    backend.raw_input(13, 100, HID_TO_X11[4], {}, 20)
+    assert len(events) == 2 and all(e['down'] for e in events)
+    backend.raw_input(14, 100, HID_TO_X11[4], {}, 30)
+    backend.core_key_press(HID_TO_X11[4], 40)
+    backend.raw_input(13, 99, HID_TO_X11[5], {}, 50)
+    backend.core_key_press(HID_TO_X11[5], 60)
+    assert len(events) == 3 and not events[-1]['down']
+
+
+@native
+def test_native_xrandr_enumerates_two_monitors_instead_of_only_primary():
+    backend = LinuxBackend(lambda e: True)
+    backend.open()  # Keep an X client connected so Xvfb does not reset RandR.
+    try:
+        subprocess.run(['xrandr', '--setmonitor', 'MouseShareLeft', '960/254x1080/286+0+0', 'none'], check=True)
+        subprocess.run(['xrandr', '--setmonitor', 'MouseShareRight', '960/254x1080/286+960+0', 'screen'], check=True)
+        monitors = backend.monitors()
+        assert len(monitors) == 2
+        assert {(m['x'], m['y'], m['w'], m['h']) for m in monitors} == {(0, 0, 960, 1080), (960, 0, 960, 1080)}
+        assert backend.bounds() == (0, 0, 1920, 1080)
+    finally:
+        for name in ('MouseShareLeft', 'MouseShareRight'):
+            subprocess.run(['xrandr', '--delmonitor', name], check=True)
+        backend.stop()
+
+
+@native
+@pytest.mark.parametrize('hid', [4, 42, 79])
+def test_native_captured_hold_forwards_repeats_and_stops_on_release(hid):
+    events = []
+    backend = LinuxBackend(events.append)
+    backend.start()
+    api = X11()
+    display = api.x.XOpenDisplay(None)
+    try:
+        assert backend.ready(), backend.error
+        # Only this isolated test treats another XTEST client as physical input.
+        # Production always excludes every discovered XTEST source.
+        backend.test_sources.clear()
+        backend.capture(True)
+        api.xt.XTestFakeKeyEvent(display, HID_TO_X11[hid], True, 0)
+        api.x.XSync(display, False)
+        wait_for(lambda: sum(e.get('key') == hid and e.get('down', False) for e in events) >= 3)
+        api.xt.XTestFakeKeyEvent(display, HID_TO_X11[hid], False, 0)
+        api.x.XSync(display, False)
+        wait_for(lambda: any(e.get('key') == hid and not e.get('down', True) for e in events))
+        count = len(events)
+        time.sleep(.15)
+        assert len(events) == count and not backend.keys
+    finally:
+        api.xt.XTestFakeKeyEvent(display, HID_TO_X11[hid], False, 0)
+        api.x.XSync(display, False)
+        backend.stop()
+        api.x.XCloseDisplay(display)
+
+
+@native
+def test_native_receiver_repeated_network_down_does_not_restart_xorg_repeat():
+    backend = LinuxBackend(lambda e: True)
+    api = X11()
+    x, display = api.x, api.x.XOpenDisplay(None)
+    U, D, Int = C.c_ulong, C.c_void_p, C.c_int
+    x.XCreateSimpleWindow.restype = U
+    x.XCreateSimpleWindow.argtypes = [D, U, Int, Int, C.c_uint, C.c_uint, C.c_uint, U, U]
+    x.XSelectInput.argtypes = [D, U, C.c_long]
+    x.XSetInputFocus.argtypes = [D, U, Int, U]
+    window = x.XCreateSimpleWindow(display, x.XDefaultRootWindow(display), 10, 10, 100, 100, 0, 0, 0)
+    try:
+        x.XSelectInput(display, window, 3)
+        x.XMapWindow(display, window)
+        x.XSetInputFocus(display, window, 1, 0)
+        x.XSync(display, False)
+        def drain():
+            result = []
+            while x.XPending(display):
+                event = Event()
+                x.XNextEvent(display, C.byref(event))
+                result.append(event.key.type)
+            return result
+        types = []
+        for _ in range(35):
+            backend.key(4, True)
+            time.sleep(.04)
+            types.extend(drain())
+        backend.key(4, False)
+        time.sleep(.05)
+        types.extend(drain())
+        assert types.count(2) >= 4, types
+        time.sleep(.15)
+        assert not drain() and not backend.injected_keys
     finally:
         backend.stop()
         x.XDestroyWindow(display, window)

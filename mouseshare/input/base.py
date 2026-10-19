@@ -10,7 +10,7 @@ ALT = {226, 230}
 
 
 class BaseBackend:
-    shortcuts = {41: "panic", 69: "game", 6: "share_copy", 25: "share_paste"}
+    shortcuts = {41: "panic", 69: "game", 6: "share_copy", 25: "share_paste", 44: "switch_peer"}
     shortcut_modifiers = (CTRL, ALT)
     copy_modifier = CTRL
     def __init__(self, emit):
@@ -27,7 +27,9 @@ class BaseBackend:
         self.last_local = time.monotonic()
         self.native_file_paste_ready = False
         self.sharing_shortcuts_enabled = False
+        self.switch_shortcut_enabled = False
         self.cursor_is_hidden = False
+        self._monitors, self.monitor_checked = [], 0
 
     def physical(self, event):
         self.last_local = time.monotonic()
@@ -41,8 +43,13 @@ class BaseBackend:
                 if not down:
                     self.hotkey_keys.discard(key)
                 return True
-            action = self.shortcuts.get(key) if all(self.keys & group for group in self.shortcut_modifiers) else None
-            if action in {'share_copy', 'share_paste'} and (not self.sharing_shortcuts_enabled or not self.keys & {225, 229}):
+            modifiers = (CTRL, ALT) if key in {6, 25, 44} else self.shortcut_modifiers
+            action = self.shortcuts.get(key) if all(self.keys & group for group in modifiers) else None
+            if (key in {6, 25, 44} and self.copy_modifier == CTRL and 230 in self.keys and 226 not in self.keys):
+                action = None  # AltGr must continue producing layout-specific characters.
+            if action in {'share_copy', 'share_paste'} and not self.sharing_shortcuts_enabled:
+                action = None
+            if action == 'switch_peer' and not self.switch_shortcut_enabled:
                 action = None
             if (down and key == 25 and self.native_file_paste_ready and self.keys & self.copy_modifier
                     and not self.keys & (ALT | {225, 229})):
@@ -97,6 +104,31 @@ class BaseBackend:
 
     def bounds(self):
         return (0, 0, 1920, 1080)
+
+    def monitors(self):
+        x, y, w, h = self.bounds()
+        return [dict(id='primary', x=int(x), y=int(y), w=int(w), h=int(h), primary=True)]
+
+    def cached_monitors(self, read):
+        now = time.monotonic()
+        if not self._monitors or now-self.monitor_checked >= 1:
+            self._monitors = read()
+            self.monitor_checked = now
+        return self._monitors
+
+    def screen_info(self):
+        from ..displays import union
+        monitors = self.monitors()
+        x, y, w, h = union(monitors)
+        return dict(x=int(x), y=int(y), w=int(w), h=int(h), monitors=monitors)
+
+    def monitor_at(self, point):
+        from ..displays import project
+        screen = self.screen_info()
+        x, y = project(point, screen)
+        monitor = next(m for m in screen['monitors'] if m['x'] <= x < m['x']+m['w']
+                       and m['y'] <= y < m['y']+m['h'])
+        return tuple(monitor[k] for k in ('x', 'y', 'w', 'h'))
 
     def foreground(self):
         return "", False

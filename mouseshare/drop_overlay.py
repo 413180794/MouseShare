@@ -3,7 +3,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, QRect, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QCursor, QPainter
 from PySide6.QtWidgets import QApplication
 
 from .backdrop import Backdrop
@@ -11,6 +11,7 @@ from .drop_design import DropVisual
 from .i18n import exception_text, tr
 from .i18n_widgets import QWidget
 from .topology import Rect
+from .displays import mapped_monitors
 
 EDGE_WIDTH = 14
 
@@ -22,8 +23,8 @@ def local_files(mime):
     return [url.toLocalFile() for url in urls]
 
 
-def edge_regions(layout, local_id, bounds, peers, legacy_side='right', selected=''):
-    """Map touching desktop rectangles to primary-screen logical edge strips."""
+def edge_regions(layout, local_id, bounds, peers, legacy_side='right', selected='', *, desktop_bounds=None):
+    """Map physical monitor contacts to Qt edge strips on the current display."""
     left, top, width, height = bounds.x(), bounds.y(), bounds.width(), bounds.height()
     result = []
     nodes = layout.get('nodes', {}) if layout and layout.get('enabled') else {}
@@ -31,10 +32,20 @@ def edge_regions(layout, local_id, bounds, peers, legacy_side='right', selected=
         peers = {selected: peers[selected]} if selected in peers else {}
         nodes = {}
     a = Rect.parse(nodes[local_id]) if nodes else None
+    if a and desktop_bounds is not None:
+        d = desktop_bounds
+        a = Rect(a.x+(bounds.x()-d.x())*a.w/d.width(), a.y+(bounds.y()-d.y())*a.h/d.height(),
+                 bounds.width()*a.w/d.width(), bounds.height()*a.h/d.height())
+    contacts = []
     for key in peers:
         if nodes and key not in nodes:
             continue
-        b = Rect.parse(nodes[key]) if nodes else None
+        if nodes:
+            screen = getattr(peers[key], 'peer_screen', {}) or dict(w=1920, h=1080)
+            contacts.extend((key, Rect(**r)) for r in mapped_monitors(nodes[key], screen))
+        else:
+            contacts.append((key, None))
+    for key, b in contacts:
         for side in ('left', 'right', 'top', 'bottom') if nodes else (legacy_side,):
             vertical = side in {'left', 'right'}
             if nodes:
@@ -236,7 +247,7 @@ class EdgePortal(QObject):
                 and self.window.engine.availability.get(session.peer_id, False))
 
     def screen(self):
-        return QApplication.primaryScreen()
+        return QApplication.screenAt(QCursor.pos()) or QApplication.primaryScreen()
 
     def refresh(self):
         if self.closed:
@@ -274,7 +285,7 @@ class EdgePortal(QObject):
         layout = self.window.settings.get('desktop_layout', {})
         selected = getattr(self.window.network.session, 'peer_id', '')
         regions = edge_regions(layout, self.window.identity.id, screen.geometry(), peers,
-                               self.window.settings.get('side'), selected)
+                               self.window.settings.get('side'), selected, desktop_bounds=screen.virtualGeometry())
         key = tuple((peer, side, rect.x(), rect.y(), rect.width(), rect.height(), id(peers[peer]))
                     for peer, side, rect in regions)
         if key != self.routes_key:
@@ -291,7 +302,7 @@ class EdgePortal(QObject):
             key = getattr(session, 'peer_id', '')
             local_id = getattr(getattr(self.window, 'identity', None), 'id', '')
             regions = edge_regions(settings.get('desktop_layout', {}), local_id, self.screen().geometry(),
-                                   {key: session}, side, key)
+                                   {key: session}, side, key, desktop_bounds=self.screen().virtualGeometry())
             if regions:
                 return regions[0][1], regions[0][2].center()
         return side, None

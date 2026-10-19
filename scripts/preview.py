@@ -51,6 +51,16 @@ def main():
             window.stack.setCurrentIndex(i)
             app.processEvents()
             window.grab().save(str(args.output / f"{name}.png"))
+        original_metadata = window.layout_editor.metadata
+        window.layout_editor.update_devices({window.identity.id: dict(name='Ubuntu Desktop', connected=True,
+            screen=dict(x=0, y=0, w=3840, h=1080, monitors=[
+                dict(id='left', x=0, y=0, w=1920, h=1080), dict(id='right', x=1920, y=0, w=1920, h=1080)])),
+            peer_id: dict(name='Windows Laptop', connected=True, screen=dict(w=1920, h=1080))})
+        window.layout_editor.reset_nodes()
+        app.processEvents()
+        window.grab().save(str(args.output / 'layout-multimonitor.png'))
+        window.layout_editor.update_devices(original_metadata)
+        window.layout_editor.reset_nodes()
         window.share_panel.transfer(dict(type='transfer', job='demo-file', direction='receive',
                                         title='Designs / Project files', status='transferring',
                                         detail=tr('正在接收并校验'), total=200 * 1024**2, done=84 * 1024**2,

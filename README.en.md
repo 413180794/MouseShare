@@ -6,7 +6,7 @@ Share a keyboard, mouse, clipboard and files between **Windows, macOS and Linux 
 
 [Download](https://github.com/413180794/MouseShare/releases) · [Builds](https://github.com/413180794/MouseShare/actions) · [Acceptance checklist](docs/ACCEPTANCE.md)
 
-**v0.6.2 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available.
+**v0.7.0 is a preview.** Automated tests cover authenticated two/three-node TLS peers and ownership recovery. Real desktop interaction, OS permissions and individual games require acceptance on your devices. Linux is tested with isolated Xvfb displays; no physical Linux computer was available.
 
 ![English connection UI with isolated sample devices](docs/screenshot.en.png)
 
@@ -18,12 +18,12 @@ The app supports **English and Simplified Chinese** on Windows, macOS and Linux.
 
 | Platform | Package | Installation |
 | --- | --- | --- |
-| Windows 10/11 x64 | `MouseShare-0.6.2-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
-| Windows portable | `MouseShare-0.6.2-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
-| Apple Silicon, macOS 13+ | `MouseShare-0.6.2-macOS-arm64.dmg` | Drag the app into Applications |
-| Intel, macOS 13+ | `MouseShare-0.6.2-macOS-x86_64.dmg` | Drag the app into Applications |
-| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.6.2-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
-| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.6.2-Linux-arm64.deb` or `.tar.gz` | Same as above |
+| Windows 10/11 x64 | `MouseShare-0.7.0-Windows-x64-Setup.exe` | Run Setup; retain private-LAN firewall rules |
+| Windows portable | `MouseShare-0.7.0-Windows-x64-portable.zip` | Extract everything and run `MouseShare.exe` |
+| Apple Silicon, macOS 13+ | `MouseShare-0.7.0-macOS-arm64.dmg` | Drag the app into Applications |
+| Intel, macOS 13+ | `MouseShare-0.7.0-macOS-x86_64.dmg` | Drag the app into Applications |
+| Linux x64, Ubuntu 22.04+ / Debian 12+ | `MouseShare-0.7.0-Linux-x64.deb` or `.tar.gz` | `sudo apt install ./package.deb`; or extract the portable archive |
+| Linux ARM64, Ubuntu 24.04+ / Debian 13+ | `MouseShare-0.7.0-Linux-arm64.deb` or `.tar.gz` | Same as above |
 
 Packages include Python and Qt. Linux still requires X11/Qt system libraries; the DEB declares these dependencies. The portable archive includes a user-level `install.sh` that adds a menu entry and preserves older version directories. See [Linux instructions](docs/INSTALL-Linux.txt).
 
@@ -85,7 +85,7 @@ Physical input on a receiving computer reclaims control. Holding a key or mouse 
 
 ## Clipboard and files
 
-New text, HTML and images copied after connection sync automatically on Windows/macOS/X11. Files are fetched when you paste: copy files on the source, then press Ctrl+Alt+Shift+V in the destination window. Ctrl+Alt+Shift+C is a dedicated copy command; macOS uses Control+Option+Shift+C/V. Optional native Ctrl+V/Command+V interception applies only to fresh remote file offers. Automatic paste requires the original focus, input activity and clipboard to remain unchanged; otherwise use the completed transfer record. Explicit sends still offer receive confirmation; the completed record also offers Copy Files and a drag-out button. You can drop files onto the app. The optional edge drop surface shows a compact glass hint near the entry point when dragging local files onto a connected screen edge. A slow glow and slight icon drift keep the hint gentle while the drop target stays fixed. Release to send, or press Esc to cancel; idle desktops stay clear. It also works when remote input controls the source file manager.
+New text, HTML and images copied after connection sync automatically on Windows/macOS/X11. Files are fetched when you paste: copy files on the source, then press Ctrl+Alt+V in the destination window. Ctrl+Alt+C is a dedicated copy command; macOS uses Control+Option+C/V. Optional native Ctrl+V/Command+V interception applies only to fresh remote file offers. Automatic paste requires the original focus, input activity and clipboard to remain unchanged; otherwise use the completed transfer record. Explicit sends still offer receive confirmation; the completed record also offers Copy Files and a drag-out button. You can drop files onto the app. The optional edge drop surface shows a compact glass hint near the entry point when dragging local files onto a connected screen edge. A slow glow and slight icon drift keep the hint gentle while the drop target stays fixed. Release to send, or press Esc to cancel; idle desktops stay clear. It also works when remote input controls the source file manager.
 
 Transfers show progress, speed and estimated time, support cancellation/re-send, and save batches in separate folders to preserve existing filenames. Each file is verified with SHA-256. The default receive directory is `Downloads/MouseShare`; it is configurable. The latest 20 completed/failed records store metadata locally. Clearing records keeps received files.
 
@@ -100,13 +100,22 @@ Transfers show progress, speed and estimated time, support cancellation/re-send,
 
 ![Compact edge drop hint with sample data; the compositor renders the actual backdrop](docs/drop-overlay.en.png)
 
+
+Enable optional file prefetch to populate the real system file clipboard after receiving and verifying up to 64 MiB per copy. System context-menu Paste then works. New local clipboard content is preserved; use shared paste to fetch larger files on demand. The original four-key shortcuts remain supported.
+
+The optional file-manager extension adds **Receive files here (MouseShare)**: on Windows 11 use **Show more options**. Ubuntu GNOME requires `python3-nautilus` and reopening Files. Files are received in a separate batch folder inside the selected directory, preserving existing files. Disable the extension to remove it; disable it before uninstalling on Linux.
+
+A laptop can use its built-in keyboard and trackpad. Cross with the trackpad, use **Control this computer**, or press **Ctrl+Alt+Space** (Control+Option+Space on Mac) to switch to the selected peer. Press again to reclaim. Input ownership still has one physical source; input on the receiving computer reclaims local control.
+
+![Ubuntu dual-monitor and Windows laptop layout](docs/layout-multimonitor.en.png)
+
 ## Everyday use and limits
 
 Closing the window keeps the app in the tray/menu bar where available. Login startup is opt-in. Edge dwell is adjustable from 100–1500 ms and receiver speed from 0.25–4×.
 
 Physical keyboard positions use USB HID IDs; the receiver's layout and IME produce text. The Windows key maps to macOS Command, Ctrl to Control. Enable Swap Ctrl and Command/Win on the receiver to change this behavior. On X11, the standard evdev/XKB keycode layout is used; relative mice and standard wheels are covered. Tablets, custom keycode maps and specific gaming drivers need acceptance.
 
-Each instance connects to up to seven peers and uses its primary monitor as the sharing boundary. The source cursor hides during forwarding and restores on return or failure. The receiver has an optional colored pointer ring. Independent topology for multiple monitors on one computer, continuous native cross-computer file dragging, resumable transfers, video streaming and Windows ARM packages remain future work. Login/lock screens, UAC secure desktops, macOS Secure Input and elevated target applications can restrict injection. See [Microsoft's SendInput restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput).
+Each instance connects to up to seven peers. Every physical display is shown, with negative coordinates and offset displays supported. Displays on the same computer preserve the system arrangement and move as a group. Change their internal arrangement in system display settings. For existing layouts, Reset arrangement and Save adopts the new overall aspect ratio. The source cursor hides during forwarding and restores on return or failure. The receiver has an optional colored pointer ring. Independently dragging each monitor of the same computer, continuous native cross-computer file dragging, resumable transfers, video streaming and Windows ARM packages remain future work. Login/lock screens, UAC secure desktops, macOS Secure Input and elevated target applications can restrict injection. See [Microsoft's SendInput restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput).
 
 ![Draggable layout with sample devices](docs/layout.en.png)
 

@@ -274,3 +274,17 @@ def test_leaving_hint_cancels_unless_same_drag_returns(portal, reenter, monkeypa
     assert controller.surface.isVisible() == reenter
     assert controller.surface.geometry() == geometry
     assert not calls
+
+
+def test_secondary_monitor_drop_sensor_only_on_outer_connected_edge():
+    from types import SimpleNamespace
+    from mouseshare.drop_overlay import edge_regions
+    a, b = 'a'*64, 'b'*64
+    layout = dict(enabled=True, nodes={a: dict(x=0, y=0, w=640, h=180),
+                                      b: dict(x=640, y=0, w=320, h=180)})
+    peers = {b: SimpleNamespace(peer_screen=dict(w=1920, h=1080))}
+    desktop = QRect(-1920, 0, 3840, 1080)
+    assert not edge_regions(layout, a, QRect(-1920, 0, 1920, 1080), peers, desktop_bounds=desktop)
+    routes = edge_regions(layout, a, QRect(0, 0, 1920, 1080), peers, desktop_bounds=desktop)
+    assert len(routes) == 1 and routes[0][0:2] == (b, 'right')
+    assert routes[0][2].right() == 1919

@@ -365,3 +365,35 @@ def test_mac_failed_stationary_movement_stops_forwarding(monkeypatch, failure):
         assert events == [{"type": "command", "action": "panic"}]
         assert backend.error
     assert not backend.captured and calls[-1] is True
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows keyboard hook')
+def test_windows_builtin_keyboard_scan_and_missing_scan_fallback_preserve_repeats(monkeypatch):
+    from mouseshare.input.windows import KeyHook, WindowsBackend, U
+    events = []
+    backend = WindowsBackend(events.append)
+    monkeypatch.setattr(U, 'CallNextHookEx', lambda *args: 0)
+    for scan in (0x1e, 0):
+        data = KeyHook(vkCode=0x41, scanCode=scan, flags=0, dwExtraInfo=0)
+        for message in (0x100, 0x100, 0x101):
+            backend.key_proc(0, message, ctypes.addressof(data))
+    assert events == [dict(type='key', key=4, down=down) for down in (True, True, False)*2]
+    data = KeyHook(vkCode=0x41, scanCode=0x1e, flags=0x10, dwExtraInfo=0)
+    backend.key_proc(0, 0x100, ctypes.addressof(data))
+    assert len(events) == 6
+
+
+@pytest.mark.skipif(sys.platform != 'darwin', reason='Quartz repeat metadata')
+def test_mac_repeat_is_marked_and_released_without_posting_to_desktop(monkeypatch):
+    from mouseshare.input.macos import MacBackend, Q
+    backend = MacBackend(lambda e: True)
+    flags, posts = [], []
+    monkeypatch.setattr(Q, 'CGEventCreateKeyboardEvent', lambda *a: object())
+    monkeypatch.setattr(Q, 'CGEventSetFlags', lambda *a: None)
+    monkeypatch.setattr(Q, 'CGEventSetIntegerValueField', lambda e, field, value: flags.append((field, value)))
+    monkeypatch.setattr(backend, 'post', posts.append)
+    backend.key(4, True)
+    backend.key(4, True)
+    backend.key(4, False)
+    assert [v for f, v in flags if f == Q.kCGKeyboardEventAutorepeat] == [0, 1, 0]
+    assert len(posts) == 3 and not backend.injected_keys

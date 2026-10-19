@@ -136,3 +136,62 @@ def test_three_computer_paste_uses_latest_offer_even_when_controller_is_an_older
     control.action('paste')
     request = next(m for m in reversed(messages) if m['type'] == 'file_request')
     assert request['offer'] == 'c'*32
+
+
+def test_prefetch_populates_real_file_clipboard_without_synthetic_paste(hub, tmp_path):
+    control, peer, calls, messages, sequence, _, _ = hub
+    control.window.settings.set(file_clipboard_prefetch=True)
+    offer(hub)
+    request = next(m for m in messages if m['type'] == 'file_request')
+    authorization = control.claim(peer.peer_id, request['offer'], request['request'])
+    assert authorization == dict(destination='', max_bytes=64*1024**2)
+    file = tmp_path/'received.txt'
+    file.write_text('complete, hash-verified transfer')
+    control.transfer(dict(request=request['request'], peer=peer.peer_id, offer=request['offer'],
+                          direction='receive', status='complete', paths=[str(file)]))
+    assert [url.toLocalFile() for url in control.sync.clipboard.mime.urls()] == [str(file)]
+    assert not calls
+
+
+@pytest.mark.parametrize('change', ['clipboard', 'disabled', 'new-offer'])
+def test_prefetch_never_replaces_newer_local_content(hub, tmp_path, change):
+    control, peer, _, messages, sequence, _, _ = hub
+    control.window.settings.set(file_clipboard_prefetch=True)
+    offer(hub)
+    request = next(m for m in messages if m['type'] == 'file_request')
+    if change == 'clipboard':
+        sequence[0] += 1
+    elif change == 'disabled':
+        control.window.settings.set(file_clipboard_prefetch=False)
+    else:
+        control.offers[peer.peer_id]['id'] = 'c'*32
+    control.transfer(dict(request=request['request'], peer=peer.peer_id, offer=request['offer'],
+                          direction='receive', status='complete', paths=[str(tmp_path/'file')]))
+    assert not control.sync.clipboard.mime.hasUrls()
+
+
+def test_explicit_folder_is_local_and_bound_to_one_transfer(hub, tmp_path):
+    control, peer, calls, messages, *_ = hub
+    offer(hub)
+    control.action('paste', destination=tmp_path)
+    request = next(m for m in messages if m['type'] == 'file_request')
+    assert not control.claim('c'*64, request['offer'], request['request'])
+    assert control.claim(peer.peer_id, request['offer'], request['request'])['destination'] == str(tmp_path.resolve())
+    assert not control.claim(peer.peer_id, request['offer'], request['request'])
+    control.transfer(dict(request=request['request'], peer=peer.peer_id, offer=request['offer'],
+                          direction='receive', status='complete', paths=[str(tmp_path/'file')]))
+    assert not calls and not control.sync.clipboard.mime.hasUrls()
+
+
+def test_three_key_alias_and_altgr_character_are_distinct():
+    events = []
+    backend = NullBackend(events.append)
+    backend.sharing_shortcuts_enabled = True
+    for key in (224, 226, 25):
+        backend.physical(dict(type='key', key=key, down=True))
+    assert events[-1] == dict(type='command', action='share_paste')
+    backend = NullBackend(events.append)
+    backend.sharing_shortcuts_enabled = True
+    for key in (224, 230, 25):
+        backend.physical(dict(type='key', key=key, down=True))
+    assert events[-1] == dict(type='key', key=25, down=True)

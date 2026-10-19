@@ -159,7 +159,7 @@ class Session:
 
     def authenticate(self):
         local = self.owner.identity.hello(self.owner.settings.get("name"))
-        local.update(features=["sharing-v1", "multi-v1", "layout-v1", "file-offer-v1"],
+        local.update(features=["sharing-v1", "multi-v1", "layout-v1", "file-offer-v1", "monitors-v1"],
                      port=self.owner.port, screen=self.owner.screen_provider())
         # Commit before revealing either random nonce. This prevents a middleman
         # choosing its nonce after seeing the other side's SAS input.
@@ -180,9 +180,8 @@ class Session:
         remote_der, remote_cert, remote_nonce = check_hello(remote)
         self.peer_id, self.peer_name = remote["id"], remote["name"]
         self.peer_screen = remote.get("screen", {})
-        if (not isinstance(self.peer_screen, dict)
-                or any(type(self.peer_screen.get(k)) is not int or not 64 <= self.peer_screen[k] <= 32768 for k in ('w', 'h'))):
-            self.peer_screen = {}
+        from .displays import validate_screen
+        self.peer_screen = validate_screen(self.peer_screen)
         self.peer_features = remote.get("features", []) if isinstance(remote.get("features"), list) else []
         self.peer_port = remote.get("port", INPUT_PORT)
         if type(self.peer_port) is not int or not 1 <= self.peer_port <= 65535:

@@ -120,8 +120,22 @@ class MacBackend(BaseBackend):
             raise ValueError("Unknown permission")
 
     def bounds(self):
-        rect = Q.CGDisplayBounds(Q.CGMainDisplayID())
-        return rect.origin.x, rect.origin.y, rect.size.width, rect.size.height
+        from ..displays import union
+        return union(self.monitors())
+
+    def monitors(self):
+        return self.cached_monitors(self.read_monitors)
+
+    def read_monitors(self):
+        error, displays, count = Q.CGGetActiveDisplayList(16, None, None)
+        if error or not displays:
+            displays = [Q.CGMainDisplayID()]
+        result = []
+        for display in displays:
+            rect = Q.CGDisplayBounds(display)
+            result.append(dict(id=str(display), x=int(rect.origin.x), y=int(rect.origin.y),
+                               w=int(rect.size.width), h=int(rect.size.height), primary=bool(Q.CGDisplayIsMain(display))))
+        return result
 
     def desktop_active(self):
         session = Q.CGSessionCopyCurrentDictionary()
@@ -245,6 +259,7 @@ class MacBackend(BaseBackend):
         if code is None:
             return
         with self.inject_lock:
+            repeat = down and key in self.injected_keys and key < 224
             self.injected_keys.add(key) if down else self.injected_keys.discard(key)
             flags = 0
             for keys, mask in [({224, 228}, Q.kCGEventFlagMaskControl),
@@ -254,6 +269,7 @@ class MacBackend(BaseBackend):
                 if self.injected_keys & keys:
                     flags |= mask
             event = Q.CGEventCreateKeyboardEvent(None, code, down)
+            Q.CGEventSetIntegerValueField(event, Q.kCGKeyboardEventAutorepeat, int(repeat))
             Q.CGEventSetFlags(event, flags)
             self.post(event)
 

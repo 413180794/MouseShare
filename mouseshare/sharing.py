@@ -352,11 +352,16 @@ class SharingService:
                            clipboard=header['clipboard'], sock=sock, peer_id=getattr(channel, 'peer_id', ''),
                            request=header.get('request', ''), offer=header.get('offer', ''))
             requested = bool(job.request)
+            authorization = (self.authorize_request(job.peer_id, job.offer, job.request)
+                             if requested and re.fullmatch('[0-9a-f]{32}', str(job.request))
+                             and re.fullmatch('[0-9a-f]{32}', str(job.offer)) else False)
             if requested and (not re.fullmatch('[0-9a-f]{32}', str(job.request))
                               or not re.fullmatch('[0-9a-f]{32}', str(job.offer))
-                              or not self.authorize_request(job.peer_id, job.offer, job.request)):
+                              or not authorization):
                 sock.sendall(frame(dict(type='accept', accepted=False)))
                 return
+            if isinstance(authorization, dict) and job.total > authorization['max_bytes']:
+                raise OSError(tr('文件超过预接收的 64 MiB 上限，请使用共享粘贴键按需接收'))
             self.register(job)
             self.update(job, 'offered', tr('{p0} 请求发送 {p1} 项', p0=channel.peer_name, p1=len(entries)))
             if requested or self.settings.get('auto_receive_files', False):
@@ -372,7 +377,10 @@ class SharingService:
                 sock.sendall(frame(dict(type='accept', accepted=False)))
                 self.update(job, 'rejected', tr('已拒绝或接收请求已过期'))
                 return
-            destination = Path(self.settings.get('receive_directory') or Path.home() / 'Downloads' / 'MouseShare')
+            selected = authorization.get('destination') if isinstance(authorization, dict) else None
+            destination = Path(selected or self.settings.get('receive_directory') or Path.home() / 'Downloads' / 'MouseShare')
+            if selected and not destination.is_dir():
+                raise OSError(tr('目标文件夹已不存在，请重新选择'))
             destination.mkdir(parents=True, exist_ok=True)
             if shutil.disk_usage(destination).free < job.total + 10 * 1024**2:
                 raise OSError(tr('接收目录空间不足'))

@@ -59,11 +59,17 @@ def number(value, lo, hi):
 
 
 def valid_input(message):
+    from .displays import valid_point
+    if 'point' in message and not valid_point(message['point']):
+        return False
     def token(key, length=32):
         return isinstance(message.get(key), str) and re.fullmatch('[0-9a-f]{'+str(length)+'}', message[key]) is not None
     if 'flow' in message and not token('flow'):
         return False
     kind = message.get("type")
+    if kind == 'screen':
+        from .displays import validate_screen
+        return bool(validate_screen(message.get('screen')))
     if kind == 'layout':
         from .topology import validate_layout
         try:

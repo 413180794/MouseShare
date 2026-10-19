@@ -111,7 +111,7 @@ class MainWindow(QMainWindow):
                                lambda s: self.engine.enqueue({"type": "connected", "session": s}),
                                lambda s, m: self.engine.enqueue({"type": "network", "session": s, "message": m}),
                                self.disconnected, self.bridge.error.emit)
-        self.network.screen_provider = lambda: dict(w=self.backend.bounds()[2], h=self.backend.bounds()[3])
+        self.network.screen_provider = self.backend.screen_info
         self.discovery = Discovery(identity, settings, self.bridge.peer.emit, self.bridge.error.emit)
         self.sharing = SharingService(self.network, settings, self.sharing_allowed, self.bridge.sharing.emit)
         self.bridge.sharing.connect(self.sharing_event)
@@ -231,13 +231,14 @@ class MainWindow(QMainWindow):
             self.file_clipboard.handle_event(event)
         if event['type'] == 'peer_connected':
             self.refresh_peers()
+        elif event['type'] == 'screens_changed':
+            self.refresh_layout_devices()
 
     def refresh_layout_devices(self):
         if not hasattr(self, 'layout_editor'):
             return
-        bounds = self.backend.bounds()
         metadata = {self.identity.id: dict(name=self.settings.get('name'), connected=True,
-                                          screen=dict(w=bounds[2], h=bounds[3]))}
+                                          screen=self.backend.screen_info())}
         for key, peer in self.settings.get('peers').items():
             session = self.network.peer_session(key)
             metadata[key] = dict(name=peer.get('name', key[:8]), connected=bool(session),
@@ -369,6 +370,10 @@ class MainWindow(QMainWindow):
         self.connect_button = QPushButton(tr('配对并连接'))
         self.connect_button.setObjectName("primary")
         self.connect_button.clicked.connect(self.connect_selected)
+        self.control_button = QPushButton(tr('切换控制到此电脑'))
+        self.control_button.setToolTip(tr('无需移动触控板；Ctrl+Alt+空格切换，再按一次收回。'))
+        self.control_button.clicked.connect(lambda: self.engine.command('switch_peer', peer=self.selected_id()))
+        row.addWidget(self.control_button)
         row.addWidget(self.connect_button)
         self.forget_button = QPushButton(tr('取消配对'))
         self.forget_button.clicked.connect(self.forget_selected)
@@ -599,6 +604,7 @@ class MainWindow(QMainWindow):
         selected = self.selected_id()
         session = self.network.peer_session(selected) if selected else None
         self.connect_button.setEnabled(bool(selected))
+        self.control_button.setEnabled(bool(session and session.connected))
         self.connect_button.setText(tr('选择内容共享目标') if session and session.connected else tr('连接中…') if session else tr('配对并连接'))
         self.forget_button.setEnabled(selected in self.settings.get("peers"))
 
@@ -1003,6 +1009,7 @@ def main():
     parser.add_argument("--smoke-test", action="store_true", help="Validate packaged dependencies then exit")
     parser.add_argument('--preview-drop', action='store_true', help='Preview the drop overlay for 12 seconds, without input hooks')
     parser.add_argument('--drop-smoke-test', action='store_true', help='Validate native blur and clean up without hooks or network')
+    parser.add_argument('--paste-to', help='Receive offered files into this existing local folder')
     args = parser.parse_args()
     set_language('system')
     if sys.platform == "win32":
@@ -1042,11 +1049,13 @@ def main():
     existing = QLocalSocket()
     existing.connectToServer(name)
     if existing.waitForConnected(400):
-        existing.write(b"show")
+        from .context_menu import request
+        existing.write(request(args.paste_to))
         existing.waitForBytesWritten(300)
         return 0
     QLocalServer.removeServer(name)
     server = QLocalServer()
+    server.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)
     if not server.listen(name):
         QMessageBox.critical(None, "MouseShare", tr('无法启动本机控制服务，请重启应用。'))
         return 1
@@ -1059,12 +1068,40 @@ def main():
 
     def activate():
         pending = server.nextPendingConnection()
-        if pending:
-            pending.close()
-            pending.deleteLater()
-        window.show_normal()
+        if not pending:
+            return
+        data = bytearray()
+        def read():
+            data.extend(bytes(pending.readAll()))
+            if len(data) > 8192:
+                pending.abort()
+                return
+            if b'\n' not in data and data != b'show':
+                return
+            try:
+                from .context_menu import parse_request
+                destination = parse_request(bytes(data))
+                if destination and window.file_clipboard:
+                    window.file_clipboard.action('paste', destination)
+                else:
+                    window.show_normal()
+            except (ValueError, OSError):
+                window.notice(tr('无法接收文件，请确认目标文件夹仍然存在'))
+            pending.disconnectFromServer()
+        pending.readyRead.connect(read)
+        pending.disconnected.connect(pending.deleteLater)
+        QTimer.singleShot(3000, pending.abort)
+        read()
     server.newConnection.connect(activate)
     app.aboutToQuit.connect(window.shutdown)
+    if args.paste_to and window.file_clipboard:
+        def initial_paste():
+            try:
+                from .context_menu import parse_request, request
+                window.file_clipboard.action('paste', parse_request(request(args.paste_to)))
+            except (ValueError, OSError):
+                window.notice(tr('无法接收文件，请确认目标文件夹仍然存在'))
+        QTimer.singleShot(0, initial_paste)
     if not args.minimized:
         window.show()
         if sys.platform == "darwin" and not args.demo and not window.backend.permissions():

@@ -1,6 +1,7 @@
 """Native file drop/copy surfaces and a transfer inbox; no input-hook work here."""
 import json
 import os
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QSignalBlocker, Qt, QUrl, Signal
@@ -114,12 +115,23 @@ class SharePanel(QWidget):
         self.clipboard_images = QCheckBox(tr('同步截图和图片'))
         self.clipboard_files = QCheckBox(tr('共享文件剪贴板：粘贴时传输文件'))
         self.native_paste = QCheckBox(tr('支持系统粘贴键：Windows／Linux Ctrl+V，Mac ⌘V'))
+        self.prefetch = QCheckBox(tr('预先接收文件，让系统右键「粘贴」可用（每次最多 64 MiB）'))
+        self.prefetch.setChecked(window.settings.get('file_clipboard_prefetch', False))
+        self.prefetch.toggled.connect(lambda value: self.preference('file_clipboard_prefetch', value))
         for checkbox, key in [(self.clipboard_enabled, 'clipboard_sync'), (self.clipboard_images, 'clipboard_images'),
                               (self.clipboard_files, 'clipboard_files'), (self.native_paste, 'native_file_paste')]:
             checkbox.setChecked(window.settings.get(key, True))
             checkbox.toggled.connect(lambda value, k=key: self.preference(k, value))
             body.addWidget(checkbox)
-        body.addWidget(text_label(tr('专用快捷键：Ctrl+Alt+Shift+C 复制，Ctrl+Alt+Shift+V 粘贴。Mac 对应 Control+Option+Shift+C／V。可在文件管理器中直接操作。系统粘贴键仅在有新收到的文件信息时接管；文字粘贴保持原有方式。'), 'hint', True))
+        body.addWidget(self.prefetch)
+        body.addWidget(text_label(tr('专用快捷键：Ctrl+Alt+C 复制，Ctrl+Alt+V 粘贴；原四键快捷键也可用。Mac 使用 Control+Option+C／V。Ctrl+Alt+空格切换到所选电脑，再按一次收回。'), 'hint', True))
+        body.addWidget(text_label(tr('右键粘贴需先收到完整文件。预接收会使用网络和磁盘；大文件请使用共享粘贴键按需接收。'), 'hint', True))
+        if sys.platform == 'win32' or sys.platform.startswith('linux'):
+            self.context_menu = QCheckBox(tr('在文件管理器右键菜单加入「接收文件到此处（MouseShare）」'))
+            self.context_menu.setChecked(window.settings.get('file_context_menu', False))
+            self.context_menu.toggled.connect(self.toggle_context_menu)
+            body.addWidget(self.context_menu)
+            body.addWidget(text_label(tr('Windows 11 位于「显示更多选项」。Ubuntu GNOME 需安装 python3-nautilus 并重新打开文件管理器。文件存入所选目录下的独立文件夹。'), 'hint', True))
         self.clipboard_images.setEnabled(self.clipboard_enabled.isChecked())
         self.clipboard_files.setEnabled(self.clipboard_enabled.isChecked())
         actions = QHBoxLayout()
@@ -197,6 +209,18 @@ class SharePanel(QWidget):
                 self.recipient.addItem(session.peer_name, key)
         self.recipient.setCurrentIndex(max(0, self.recipient.findData(selected)))
         del blocker
+
+    def toggle_context_menu(self, enabled):
+        from .context_menu import set_enabled
+        try:
+            set_enabled(enabled)
+            self.window.settings.set(file_context_menu=enabled)
+            self.status.setText(tr('右键扩展已更新，请重新打开文件管理器'))
+        except OSError as exc:
+            blocker = QSignalBlocker(self.context_menu)
+            self.context_menu.setChecked(not enabled)
+            del blocker
+            self.window.notice(exception_text(exc))
 
     def preference(self, key, value):
         self.window.settings.set(**{key: value})
