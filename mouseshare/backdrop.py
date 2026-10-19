@@ -74,11 +74,16 @@ class Backdrop:
         front.setCollectionBehavior_((int(front.collectionBehavior())
                                       & ~A.NSWindowCollectionBehaviorMoveToActiveSpace) | behavior)
         effect = A.NSVisualEffectView.alloc().initWithFrame_(panel.contentView().bounds())
-        effect.setMaterial_(A.NSVisualEffectMaterialFullScreenUI)
+        effect.setMaterial_(A.NSVisualEffectMaterialSidebar)
         effect.setBlendingMode_(A.NSVisualEffectBlendingModeBehindWindow)
         effect.setState_(A.NSVisualEffectStateActive)
         effect.setAppearance_(A.NSAppearance.appearanceNamed_(A.NSAppearanceNameVibrantDark))
         effect.setAutoresizingMask_(A.NSViewWidthSizable | A.NSViewHeightSizable)
+        effect.setWantsLayer_(True)
+        effect.layer().setCornerRadius_(22)
+        side = getattr(getattr(self.widget, 'visual', None), 'side', 'right')
+        effect.layer().setMaskedCorners_({'left': 12, 'right': 3, 'top': 5, 'bottom': 10}[side])
+        effect.layer().setMasksToBounds_(True)
         panel.setContentView_(effect)
         front.addChildWindow_ordered_(panel, A.NSWindowBelow)
         self.mac_front = front
@@ -139,6 +144,29 @@ class Backdrop:
         if not enabled:
             self.close()
             return False
+        # Match the compact Qt artwork; keep compositor blur inside its corners.
+        gdi = C.windll.gdi32
+        gdi.CreateRoundRectRgn.argtypes = [C.c_int]*6
+        gdi.CreateRoundRectRgn.restype = W.HRGN
+        gdi.CreateRectRgn.argtypes = [C.c_int]*4
+        gdi.CreateRectRgn.restype = W.HRGN
+        gdi.CombineRgn.argtypes = [W.HRGN, W.HRGN, W.HRGN, C.c_int]
+        gdi.DeleteObject.argtypes = [W.HANDLE]
+        user.SetWindowRgn.argtypes = [W.HWND, W.HRGN, W.BOOL]
+        radius = round(44*self.widget.devicePixelRatioF())
+        width, height = rect.right-rect.left, rect.bottom-rect.top
+        region = gdi.CreateRoundRectRgn(0, 0, width+1, height+1, radius, radius)
+        side = getattr(getattr(self.widget, 'visual', None), 'side', 'right')
+        r = radius//2
+        strip = {'left': (0, 0, r, height), 'right': (width-r, 0, width, height),
+                 'top': (0, 0, width, r), 'bottom': (0, height-r, width, height)}[side]
+        edge = gdi.CreateRectRgn(*strip)
+        if region and edge:
+            gdi.CombineRgn(region, region, edge, 2)  # RGN_OR: keep the attached edge square.
+        if edge:
+            gdi.DeleteObject(edge)
+        if region and not user.SetWindowRgn(self.hwnd, region, True):
+            gdi.DeleteObject(region)
         user.ShowWindow(self.hwnd, 4)  # SW_SHOWNOACTIVATE
         user.SetWindowPos(self.hwnd, front, rect.left, rect.top, rect.right-rect.left, rect.bottom-rect.top, 0x10)
         return True

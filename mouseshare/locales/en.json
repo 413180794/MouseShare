@@ -377,7 +377,6 @@
   "文件与文件夹均以副本发送，接收后校验完整性。": "Send copies of files and folders. Received files are verified for integrity.",
   "开启文件共享": "Enable file sharing",
   "自动接收已配对电脑的文件": "Automatically receive files from paired computers",
-  "拖文件到屏幕边缘时，展开全屏毛玻璃投递层": "Show a full-screen glass drop zone when dragging files to an edge",
   "预览投递效果 · 3 秒": "Preview drop zone · 3 sec",
   "平时隐藏；拖文件到相邻电脑的边缘后展开。松手提交，Esc 取消，传输在后台继续。": "Hidden until you drag files to a connected screen edge. Release to send, Esc to cancel. Transfers continue in the background.",
   "文件发送目标": "Send files to",
@@ -435,5 +434,9 @@
   "键鼠正在被其他应用独占，请关闭占用后重新检查": "Another app has exclusive input access. Close it and check again.",
   "当前平台缺少原生键鼠输入服务": "Native input service is unavailable on this platform",
   "界面语言": "Language",
-  "跟随系统 / System default": "System default"
+  "跟随系统 / System default": "System default",
+  "松开发送": "Release to send",
+  "拖到这里": "Drop here",
+  "后台传输中": "Transferring in background",
+  "拖文件到边缘时显示柔和毛玻璃提示": "Show a soft glass hint when dragging files to an edge"
 }

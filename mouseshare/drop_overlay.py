@@ -60,14 +60,32 @@ def edge_regions(layout, local_id, bounds, peers, legacy_side='right', selected=
     return result
 
 
+def hint_geometry(bounds, side, anchor=None):
+    """A stationary drop target attached to one edge, close to the entry point."""
+    if side not in {'left', 'right', 'top', 'bottom'} or not bounds.isValid():
+        raise ValueError('Invalid edge hint geometry')
+    point = anchor if anchor is not None else bounds.center()
+    if side in {'left', 'right'}:
+        width = min(212, max(176, round(bounds.width()*.16)), bounds.width()//4)
+        height = min(288, bounds.height()//2)
+        x = bounds.x() if side == 'left' else bounds.x()+bounds.width()-width
+        y = max(bounds.y(), min(point.y()-height//2, bounds.y()+bounds.height()-height))
+    else:
+        width = min(448, bounds.width()-32)
+        height = min(136, max(112, round(bounds.height()*.17)), bounds.height()//4)
+        x = max(bounds.x(), min(point.x()-width//2, bounds.x()+bounds.width()-width))
+        y = bounds.y() if side == 'top' else bounds.y()+bounds.height()-height
+    return QRect(x, y, width, height)
+
+
 FLAGS = (Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint | Qt.WindowType.WindowStaysOnTopHint
          | Qt.WindowType.WindowDoesNotAcceptFocus | Qt.WindowType.NoDropShadowWindowHint)
 
 
 class EdgeSensor(QWidget):
-    def __init__(self, owner, session, geometry):
+    def __init__(self, owner, session, side, geometry):
         super().__init__(None, FLAGS)
-        self.owner, self.session = owner, session
+        self.owner, self.session, self.side = owner, session, side
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -83,7 +101,8 @@ class EdgeSensor(QWidget):
 
     def dragEnterEvent(self, event):
         paths = local_files(event.mimeData())
-        if paths and self.owner.begin(self.session, paths):
+        if paths and self.owner.begin(self.session, paths, self.side,
+                                      self.mapToGlobal(event.position().toPoint())):
             event.setDropAction(Qt.DropAction.CopyAction)
             event.accept()
         else:
@@ -261,11 +280,23 @@ class EdgePortal(QObject):
         if key != self.routes_key:
             self.destroy_sensors()
             self.routes_key = key
-            self.sensors = [EdgeSensor(self, peers[peer], rect) for peer, side, rect in regions]
+            self.sensors = [EdgeSensor(self, peers[peer], side, rect) for peer, side, rect in regions]
         for sensor in self.sensors:
             sensor.show()
 
-    def begin(self, session, paths):
+    def destination_edge(self, session):
+        settings = getattr(self.window, 'settings', None)
+        side = settings.get('side', 'right') if settings else 'right'
+        if session and settings:
+            key = getattr(session, 'peer_id', '')
+            local_id = getattr(getattr(self.window, 'identity', None), 'id', '')
+            regions = edge_regions(settings.get('desktop_layout', {}), local_id, self.screen().geometry(),
+                                   {key: session}, side, key)
+            if regions:
+                return regions[0][1], regions[0][2].center()
+        return side, None
+
+    def begin(self, session, paths, side=None, anchor=None):
         if self.previewing or time.monotonic() < self.cooldown or not self.valid_session(session):
             return False
         if self.active and self.session is not session:
@@ -277,8 +308,12 @@ class EdgePortal(QObject):
         self.control_context = self.context()
         self.enter_generation += 1
         self.released_at = None
+        if side is None:
+            side, anchor = self.destination_edge(session)
+        self.surface.visual.set_edge(side)
         self.describe(paths)
-        self.surface.present(screen.geometry())
+        self.surface.present(hint_geometry(screen.geometry(), side, anchor))
+        self.hide_sensors()
         return True
 
     def describe(self, paths):
@@ -322,8 +357,10 @@ class EdgePortal(QObject):
         self.preview_deadline = time.monotonic()+3
         session = self.window.network.session
         name = session.peer_name if session and session.connected else tr('另一台电脑')
+        side, anchor = self.destination_edge(session)
+        self.surface.visual.set_edge(side)
         self.surface.visual.set_context(name, summary=tr('预览 · 3 秒后自动收起'))
-        self.surface.present(screen.geometry())
+        self.surface.present(hint_geometry(screen.geometry(), side, anchor))
 
     def eventFilter(self, watched, event):
         if self.active and event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Escape:
@@ -378,12 +415,16 @@ def run_preview(app, smoke=False):
         def check():
             try:
                 assert controller.surface.isVisible()
-                assert controller.surface.geometry() == app.primaryScreen().geometry()
+                bounds = app.primaryScreen().geometry()
+                assert bounds.contains(controller.surface.geometry())
+                assert controller.surface.width()*controller.surface.height() < bounds.width()*bounds.height()*.15
                 assert not controller.surface.isActiveWindow()
                 assert not controller.surface.backdrop.error, controller.surface.backdrop.error
-                controller.surface.dismiss()
-                controller.surface.present(app.primaryScreen().geometry())
-                assert not controller.surface.backdrop.error, controller.surface.backdrop.error
+                for side in ('left', 'right', 'top', 'bottom'):
+                    controller.surface.dismiss()
+                    controller.surface.visual.set_edge(side)
+                    controller.surface.present(hint_geometry(bounds, side))
+                    assert not controller.surface.backdrop.error, controller.surface.backdrop.error
                 print('MouseShare drop overlay smoke OK; native blur='+str(controller.surface.visual.blur_available), flush=True)
                 app.exit(0)
             except Exception as exc:

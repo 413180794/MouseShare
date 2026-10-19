@@ -142,7 +142,7 @@ class SharePanel(QWidget):
         self.auto_receive.setChecked(window.settings.get('auto_receive_files', False))
         self.auto_receive.toggled.connect(lambda value: self.preference('auto_receive_files', value))
         body.addWidget(self.auto_receive)
-        self.portal_enabled = QCheckBox(tr('拖文件到屏幕边缘时，展开全屏毛玻璃投递层'))
+        self.portal_enabled = QCheckBox(tr('拖文件到边缘时显示柔和毛玻璃提示'))
         self.portal_enabled.setChecked(window.settings.get('edge_drop', False))
         self.portal_enabled.toggled.connect(lambda value: self.preference('edge_drop', value))
         body.addWidget(self.portal_enabled)

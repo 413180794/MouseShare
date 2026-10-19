@@ -1,12 +1,12 @@
-MouseShare v0.6.1 · 中英文界面 / English and Simplified Chinese
+MouseShare v0.6.2 · 柔和边缘投递 / Gentle glass edge hints
 
-- Windows、macOS、Linux 软件界面全面支持简体中文和英文，覆盖连接、配对、权限引导、游戏模式、屏幕布局、托盘菜单、剪贴板、文件传输和全屏投递层。
-- 首次启动读取操作系统的显示语言，避免启动环境 LANG=C 导致误判；在「共享设置 → 本机偏好 → 界面语言」选择「跟随系统」「简体中文」或「English」。选择立即生效并自动保存，当前连接、传输任务与设置草稿保留。
-- 帮助入口按界面语言打开中文或英文 README。补齐英文界面截图、安装说明，以及 macOS 系统授权描述的中英文资源。
-- 设备名称、文件名、剪贴板内容、游戏进程名和协议字段保持原值，兼容已配对设备与现有设置。
+- 文件拖到已连接电脑的屏幕边缘时，在拖入点附近显示小范围毛玻璃提示；桌面其他部分保持原样。上、下、左、右均按实际屏幕布局定位。
+- 约 5.6 秒一轮的柔和光晕与轻微图案漂移，投递区域和文字位置固定。Mac／Windows 的减少动态效果设置会关闭动效，收起提示后停止动画计时器。
+- 提示保留目标电脑、文件信息、松手发送和 Esc 取消。松手后短暂确认，传输继续在后台进行；保持认证目标绑定、接收确认与原有文件校验。
+- 中文与英文同步更新，Mac 与 Windows 使用系统原生局部模糊，其他桌面按合成器能力使用模糊或深色半透明背景。
 
-English and Simplified Chinese are now available throughout the app on Windows, macOS and Linux, including pairing, permissions, game mode, layouts, tray menus, clipboard, transfers and the full-screen file-drop surface.
+Dragging local files to a connected screen edge now shows a compact glass hint near the entry point. The rest of the desktop stays unchanged. All four directions follow the screen layout. A slow glow and tiny icon drift animate the hint while its drop target and text remain stationary. macOS and Windows reduced-motion preferences are respected, and animation stops when hidden.
 
-The initial language follows your OS display language, independently of launcher LANG settings. Choose Preferences → Local preferences → Language to switch immediately; your selection is remembered while connections, transfers and unsaved settings remain in place. Help opens the matching README. Device names, filenames and clipboard content stay unchanged. macOS permission prompts use the operating system's language.
+Release to send or press Esc to cancel. The original authenticated destination, receive confirmation and file integrity checks remain in place. English and Simplified Chinese are supported. Native compositor blur is used where available, with a translucent fallback; screen capture permission is unnecessary.
 
-Windows x64 Setup/portable ZIP, macOS arm64/Intel DMGs, and Linux x64/ARM64 DEB/portable archives include the runtime. This preview uses ad hoc signing on macOS and has no commercial code signature or Apple notarization. Verify SHA256SUMS.txt. Linux native input requires X11; Wayland keeps file transfer and manual foreground clipboard actions. Physical Linux hardware remains untested.
+Preview packages: Windows x64 Setup/portable ZIP, macOS arm64/Intel DMGs, Linux x64/ARM64 DEB/portable archives. Linux input sharing requires X11; physical Linux hardware remains untested. This preview has no commercial code signature or Apple notarization. Verify SHA256SUMS.txt.

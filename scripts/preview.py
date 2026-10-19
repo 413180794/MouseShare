@@ -10,15 +10,17 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from PySide6.QtWidgets import QApplication  # noqa: E402
+from PySide6.QtCore import QPoint  # noqa: E402
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QWidget  # noqa: E402
 
 from mouseshare.app import MainWindow  # noqa: E402
 from mouseshare.branding import icon_image  # noqa: E402
 from mouseshare.config import Settings  # noqa: E402
 from mouseshare.drop_design import DropVisual  # noqa: E402
+from mouseshare.drop_overlay import hint_geometry  # noqa: E402
 from mouseshare.i18n import tr  # noqa: E402
 from mouseshare.security import Identity  # noqa: E402
-from mouseshare.ui import apply_theme  # noqa: E402
+from mouseshare.ui import apply_theme, card, text_label  # noqa: E402
 
 
 def main():
@@ -85,13 +87,35 @@ def main():
         window.grab().save(str(args.output / "settings-unsaved.png"))
         icon_image(512).save(str(args.output / "icon.png"))
         icon_image(32, True).save(str(args.output / "tray.png"))
-        drop = DropVisual()
-        drop.resize(1200, 800)
+        stage = QWidget()
+        stage.setObjectName('sampleDesktop')
+        stage.resize(1200, 800)
+        stage.setStyleSheet('QWidget#sampleDesktop {background:#edf2f3;} QFrame#card {background:#ffffff;}')
+        scene = QHBoxLayout(stage)
+        scene.setContentsMargins(110, 180, 290, 180)
+        sample, files = card('Project files', 'Sample desktop · Local files')
+        files.addSpacing(20)
+        for filename, size in [('Designs.pdf', '8.2 MiB'), ('Photos', '24 items'), ('Notes.txt', '4 KiB')]:
+            row = QHBoxLayout()
+            row.addWidget(text_label(filename, 'section'), 1)
+            row.addWidget(text_label(size, 'hint'))
+            files.addLayout(row)
+            files.addSpacing(12)
+        files.addStretch()
+        scene.addWidget(sample)
+        drop = DropVisual(stage)
         drop.set_context('Windows Desktop', 3, 'Designs.pdf · Photos · Notes.txt', state='hover')
-        drop.show()
-        app.processEvents()
-        drop.grab().save(str(args.output / 'drop-overlay.png'))
-        drop.close()
+        stage.show()
+        for side in ('left', 'right', 'top', 'bottom'):
+            drop.set_edge(side)
+            drop.setGeometry(hint_geometry(stage.rect(), side, QPoint(600, 400)))
+            drop.show()
+            drop.motion.stop()  # Deterministic sample still; the live hint animates.
+            app.processEvents()
+            stage.grab().save(str(args.output / f'drop-{side}.png'))
+            if side == 'right':
+                stage.grab().save(str(args.output / 'drop-overlay.png'))
+        stage.close()
         window.shutdown()
     print(f"Rendered UI previews to {args.output}")
 

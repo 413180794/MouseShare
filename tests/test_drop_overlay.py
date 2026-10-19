@@ -2,13 +2,16 @@
 import os
 import time
 from types import SimpleNamespace
+
 os.environ.setdefault('QT_QPA_PLATFORM', 'offscreen')
 import pytest
-from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRect, Qt, QUrl
-from PySide6.QtGui import QDragEnterEvent, QDropEvent, QKeyEvent
+from PySide6.QtCore import QEvent, QMimeData, QPoint, QPointF, QRect, QRectF, Qt, QUrl
+from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QKeyEvent
 from PySide6.QtWidgets import QApplication, QLabel, QWidget
+
 from mouseshare.config import Settings
-from mouseshare.drop_overlay import EDGE_WIDTH, EdgePortal, edge_regions, local_files
+from mouseshare.drop_design import edge_shape
+from mouseshare.drop_overlay import EDGE_WIDTH, EdgePortal, edge_regions, hint_geometry, local_files
 from mouseshare.topology import Rect
 
 A, B, C = (letter*64 for letter in 'abc')
@@ -93,13 +96,17 @@ def test_drop_targets_original_peer_once_even_if_selection_changes(portal):
                             Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
     controller.sensors[0].dragEnterEvent(enter)
     assert enter.isAccepted() and controller.active and controller.surface.isVisible()
-    assert controller.surface.geometry() == app.primaryScreen().geometry()
+    bounds = app.primaryScreen().geometry()
+    geometry = controller.surface.geometry()
+    assert bounds.contains(geometry) and geometry != bounds
+    assert geometry.right() == bounds.right()
+    assert not any(sensor.isVisible() for sensor in controller.sensors)
     window.network.session = SimpleNamespace(peer_id=C, connected=True)
     # Native mouse-up may precede Qt's drop callback; keep a short delivery grace.
     window.backend.buttons.clear()
     controller.refresh()
     assert controller.active
-    drop = QDropEvent(QPointF(200, 200), Qt.DropAction.CopyAction, mime,
+    drop = QDropEvent(QPointF(controller.surface.rect().center()), Qt.DropAction.CopyAction, mime,
                       Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
     controller.surface.dropEvent(drop)
     assert drop.isAccepted()
@@ -182,3 +189,83 @@ def test_dropping_on_close_control_cancels_instead_of_sending(portal):
                        Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
     controller.surface.dropEvent(event)
     assert not event.isAccepted() and not controller.active and not calls
+
+
+@pytest.mark.parametrize('side', ['left', 'right', 'top', 'bottom'])
+@pytest.mark.parametrize('bounds', [QRect(0, 0, 800, 600), QRect(-1920, -200, 1920, 1080),
+                                    QRect(100, 50, 3840, 2160), QRect(0, 0, 900, 1600)])
+def test_hint_stays_small_and_attached_near_drag_entry(bounds, side):
+    anchors = ([QPoint(bounds.left(), y) for y in (bounds.top(), bounds.center().y(), bounds.bottom())]
+               if side == 'left' else
+               [QPoint(bounds.right(), y) for y in (bounds.top(), bounds.center().y(), bounds.bottom())]
+               if side == 'right' else
+               [QPoint(x, bounds.top()) for x in (bounds.left(), bounds.center().x(), bounds.right())]
+               if side == 'top' else
+               [QPoint(x, bounds.bottom()) for x in (bounds.left(), bounds.center().x(), bounds.right())])
+    for anchor in anchors:
+        rect = hint_geometry(bounds, side, anchor)
+        assert bounds.contains(rect) and rect.contains(anchor)
+        assert rect.width()*rect.height() < bounds.width()*bounds.height()*.15
+        assert getattr(rect, side)() == getattr(bounds, side)()
+        # The screen-facing edge stays painted/hittable at its two ends.
+        shape = edge_shape(QRectF(0, 0, rect.width(), rect.height()), side)
+        points = {'left': [(1, 1), (1, rect.height()-1)],
+                  'right': [(rect.width()-1, 1), (rect.width()-1, rect.height()-1)],
+                  'top': [(1, 1), (rect.width()-1, 1)],
+                  'bottom': [(1, rect.height()-1), (rect.width()-1, rect.height()-1)]}[side]
+        assert all(shape.contains(QPointF(*point)) for point in points)
+
+
+def test_motion_is_subtle_stationary_and_stops_when_hidden(portal, monkeypatch):
+    from PySide6.QtTest import QTest
+    monkeypatch.setattr('mouseshare.drop_design.motion_permitted', lambda: True)
+    controller, window, peer, calls, app = portal
+    assert controller.begin(peer, ['/tmp/file'], side='left', anchor=QPoint(0, 90))
+    visual = controller.surface.visual
+    before = controller.surface.geometry()
+    frame = visual.motion_frame()
+    QTest.qWait(120)
+    assert visual.motion.isActive() and frame != visual.motion_frame()
+    assert abs(visual.motion_frame()[2]) <= 1.8
+    assert controller.surface.geometry() == before
+    controller.cancel()
+    assert not visual.motion.isActive()
+
+
+def test_reduced_motion_preserves_static_hint(portal, monkeypatch):
+    monkeypatch.setattr('mouseshare.drop_design.motion_permitted', lambda: False)
+    controller, window, peer, calls, app = portal
+    assert controller.begin(peer, ['/tmp/file'])
+    assert controller.surface.isVisible()
+    assert not controller.surface.visual.motion.isActive()
+    assert controller.surface.visual.motion_frame() == (1., .65, 0.)
+
+
+def test_preview_uses_layout_edge_instead_of_legacy_direction(portal):
+    controller, window, peer, calls, app = portal
+    window.settings.set(side='right', desktop_layout=dict(enabled=True, nodes={
+        A: Rect(0, 180, 320, 180).data(), B: Rect(0, 0, 320, 180).data()}))
+    controller.preview()
+    assert controller.surface.visual.side == 'top'
+    assert controller.surface.geometry().top() == app.primaryScreen().geometry().top()
+    assert not calls
+
+
+@pytest.mark.parametrize('reenter', [False, True])
+def test_leaving_hint_cancels_unless_same_drag_returns(portal, reenter):
+    from PySide6.QtTest import QTest
+    controller, window, peer, calls, app = portal
+    assert controller.begin(peer, ['/tmp/file'])
+    geometry = controller.surface.geometry()
+    controller.surface.dragLeaveEvent(QDragLeaveEvent())
+    if reenter:
+        mime = mime_file()  # Qt drag events borrow the MIME pointer; keep its Python owner alive.
+        event = QDragEnterEvent(QPoint(20, 100), Qt.DropAction.CopyAction, mime,
+                               Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
+        controller.surface.dragEnterEvent(event)
+        assert event.isAccepted()
+    QTest.qWait(140)
+    assert controller.active == reenter
+    assert controller.surface.isVisible() == reenter
+    assert controller.surface.geometry() == geometry
+    assert not calls
