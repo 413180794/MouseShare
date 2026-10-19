@@ -252,11 +252,14 @@ def test_preview_uses_layout_edge_instead_of_legacy_direction(portal):
 
 
 @pytest.mark.parametrize('reenter', [False, True])
-def test_leaving_hint_cancels_unless_same_drag_returns(portal, reenter):
-    from PySide6.QtTest import QTest
+def test_leaving_hint_cancels_unless_same_drag_returns(portal, reenter, monkeypatch):
     controller, window, peer, calls, app = portal
     assert controller.begin(peer, ['/tmp/file'])
     geometry = controller.surface.geometry()
+    # Exercise the expired deadline deterministically: initial font/window setup
+    # on a loaded runner can take longer than a short wall-clock qWait.
+    deadlines = []
+    monkeypatch.setattr('mouseshare.drop_overlay.QTimer.singleShot', lambda _delay, callback: deadlines.append(callback))
     controller.surface.dragLeaveEvent(QDragLeaveEvent())
     if reenter:
         mime = mime_file()  # Qt drag events borrow the MIME pointer; keep its Python owner alive.
@@ -264,7 +267,9 @@ def test_leaving_hint_cancels_unless_same_drag_returns(portal, reenter):
                                Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier)
         controller.surface.dragEnterEvent(event)
         assert event.isAccepted()
-    QTest.qWait(140)
+    assert deadlines
+    for deadline in deadlines:
+        deadline()
     assert controller.active == reenter
     assert controller.surface.isVisible() == reenter
     assert controller.surface.geometry() == geometry
